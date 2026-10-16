@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import type { NextResponse } from 'next/server';
 import { fail, ok, withWorkspace } from '@/lib/api';
+import { sameOrigin } from '@/lib/domain/context';
 import {
   HUB_COOKIE,
   HUB_COOKIE_MAX_AGE,
@@ -8,7 +9,6 @@ import {
   connectHub,
   disconnectHub,
   hubConfig,
-  isLargeHubOperation,
   openSession,
   runHub,
   sealSession,
@@ -33,18 +33,6 @@ function setCookie(res: NextResponse, value: string, maxAge: number) {
   return res;
 }
 
-/** A browser on another site must not be able to drive this staff member's Odoo session. */
-function sameOrigin(req: Request) {
-  const origin = req.headers.get('origin');
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
-  if (!origin || !host) return false;
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * GET /api/hub — whether this staff member's Odoo account is connected and,
  * if so, Odoo's hub context for them (their Odoo user, role and site).
@@ -52,10 +40,10 @@ function sameOrigin(req: Request) {
 export const GET = withWorkspace(async (ctx) => {
   const c = hubConfig();
   if (!c) return ok({ status: 'notConfigured' }, { headers: NO_STORE });
-  const session = openSession(c, (await cookies()).get(HUB_COOKIE)?.value, ctx.userId, ctx.workspaceId);
-  if (!session) return ok({ status: 'disconnected' }, { headers: NO_STORE });
+  const hub = openSession(c, (await cookies()).get(HUB_COOKIE)?.value, ctx.userId, ctx.workspaceId);
+  if (!hub) return ok({ status: 'disconnected' }, { headers: NO_STORE });
   try {
-    const context = await runHub(c, session, 'context', {}, undefined);
+    const context = await runHub(c, hub.session, 'context', {}, undefined);
     return ok({ status: 'connected', context }, { headers: NO_STORE });
   } catch (error) {
     if (error instanceof HubError && error.status === 401) {
@@ -66,11 +54,10 @@ export const GET = withWorkspace(async (ctx) => {
 });
 
 /**
- * POST /api/hub
+ * POST /api/hub — the Odoo account connection only:
  *   { operation: 'connect', login, password } — sign in to Odoo as yourself
  *   { operation: 'disconnect' }
- *   { operation, payload, requestKey }        — one hub operation (writes need a requestKey;
- *                                               retry an unconfirmed write with the same key)
+ * Business reads and writes go through /api/v2, never by operation name.
  */
 export const POST = withWorkspace(async (ctx, req) => {
   if (!sameOrigin(req)) return fail(403, 'Forbidden');
@@ -78,17 +65,16 @@ export const POST = withWorkspace(async (ctx, req) => {
   if (!c) return hubFail('HUB_NOT_CONFIGURED', 503);
 
   const text = await req.text();
+  if (text.length > 16_384) return hubFail('INVALID_COMMAND', 413);
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
     return hubFail('INVALID_COMMAND', 400);
   }
-  if (!isObject(data) || typeof data.operation !== 'string') return hubFail('INVALID_COMMAND', 400);
-  const operation = data.operation;
-  if (text.length > (isLargeHubOperation(operation) ? 450_000 : 16_384)) return hubFail('INVALID_COMMAND', 413);
+  if (!isObject(data)) return hubFail('INVALID_COMMAND', 400);
 
-  if (operation === 'connect') {
+  if (data.operation === 'connect') {
     const { login, password } = data;
     if (
       typeof login !== 'string' ||
@@ -101,10 +87,10 @@ export const POST = withWorkspace(async (ctx, req) => {
       return hubFail('INVALID_COMMAND', 400);
     }
     try {
-      const { session, context } = await connectHub(c, login.trim(), password);
+      const { session, role, context } = await connectHub(c, login.trim(), password);
       return setCookie(
         ok({ status: 'connected', context }, { headers: NO_STORE }),
-        sealSession(c, session, ctx.userId, ctx.workspaceId),
+        sealSession(c, session, role, ctx.userId, ctx.workspaceId),
         HUB_COOKIE_MAX_AGE,
       );
     } catch (error) {
@@ -113,25 +99,11 @@ export const POST = withWorkspace(async (ctx, req) => {
     }
   }
 
-  const session = openSession(c, (await cookies()).get(HUB_COOKIE)?.value, ctx.userId, ctx.workspaceId);
-
-  if (operation === 'disconnect') {
-    const backendRevoked = session ? await disconnectHub(c, session) : null;
+  if (data.operation === 'disconnect') {
+    const hub = openSession(c, (await cookies()).get(HUB_COOKIE)?.value, ctx.userId, ctx.workspaceId);
+    const backendRevoked = hub ? await disconnectHub(c, hub.session) : null;
     return setCookie(ok({ status: 'disconnected', backendRevoked }, { headers: NO_STORE }), '', 0);
   }
 
-  if (!session) return hubFail('SIGN_IN_REQUIRED', 401);
-  if (!isObject(data.payload) || (data.requestKey !== undefined && typeof data.requestKey !== 'string')) {
-    return hubFail('INVALID_COMMAND', 400);
-  }
-  try {
-    const result = await runHub(c, session, operation, data.payload, data.requestKey as string | undefined);
-    return ok(result, { headers: NO_STORE });
-  } catch (error) {
-    if (error instanceof HubError) {
-      const res = hubFail(error.code, error.status);
-      return error.code === 'SIGN_IN_REQUIRED' ? setCookie(res, '', 0) : res;
-    }
-    throw error;
-  }
+  return hubFail('INVALID_COMMAND', 400);
 });
