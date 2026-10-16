@@ -1,7 +1,7 @@
 /**
- * Hub UI feedback, ported from v1 `src/domain/hub-actions.ts` (out-of-scope
- * operations removed). UI feedback only: Odoo remains authoritative for
- * eligibility and writes.
+ * Hub UI feedback, ported from v1 `src/domain/hub-actions.ts` (Jodi's hub at
+ * 07afe25). UI feedback only: Odoo remains authoritative for eligibility and
+ * writes.
  */
 export type ActionFeedback = {
   kind: 'success' | 'error' | 'uncertain';
@@ -20,6 +20,49 @@ const messages: Record<string, string> = {
   WAIVER_TEXT_CHANGED: 'The waiver text changed. Show the signer the current version.',
   SIGNER_NOT_AUTHORIZED: 'Only the adult student or a household guardian can sign.',
   WAIVER_ALREADY_SIGNED: 'This student already has a signed waiver in Odoo.',
+  REFUND_NOT_SETTLED: 'Only a paid invoice can be refunded here.',
+  REFUND_ALREADY_OPEN: 'This invoice already has a refund in progress or completed.',
+  REFUND_ALREADY_CREDITED: 'This invoice already has a credit note in Odoo. Review it in accounting.',
+  REFUND_REVIEW_CHANGED: 'The invoice changed. Review the refund again.',
+  REFUND_NOT_PENDING: 'This refund is no longer awaiting approval.',
+  REFUND_PAYMENT_NOT_ALLOWED: 'A refund payment can only be recorded for an approved desk-payment refund.',
+  REFUND_JOURNAL_REQUIRED: 'No cash or bank journal is available to record the refund.',
+  REFUND_UNAVAILABLE: 'That refund is not available.',
+  BROADCAST_REVIEW_CHANGED: 'The audience or consent changed. Preview the broadcast again.',
+  BROADCAST_NO_RECIPIENTS: 'No consented recipients remain for this broadcast.',
+  BROADCAST_NOT_PENDING: 'This broadcast is no longer awaiting approval.',
+  BROADCAST_NOT_CANCELLABLE: 'This broadcast can no longer be cancelled.',
+  BROADCAST_UNAVAILABLE: 'That broadcast is not available.',
+  AUDIENCE_TOO_LARGE: 'This audience has more than 500 students. Choose a smaller audience.',
+  AUTOMATION_UNAVAILABLE: 'That automation is not managed here.',
+  AUTOMATION_UNCHANGED: 'That automation is already in that state.',
+  GUARDIAN_NOT_IN_HOUSEHOLD: 'That parent is not a guardian in this student’s household in Odoo.',
+  GUARDIAN_PHONE_REQUIRED: 'Add the parent’s phone number in Odoo before setting a kiosk PIN.',
+  GUARDIAN_PIN_TOO_SIMPLE: 'Choose a PIN that is not a repeated digit or a simple sequence.',
+  GUARDIAN_PIN_NOT_SET: 'This parent has no active kiosk PIN.',
+  PROMOTION_UNAVAILABLE: 'That belt award is not available.',
+  REVERSAL_NOT_LATEST: 'Only the student’s latest belt award can be reversed.',
+  MEMBERSHIP_REVIEW_REQUIRED: 'This student has an active, paused or pending membership. End or transfer it in the membership workflow before archiving.',
+  PRIMARY_GUARDIAN_REVIEW_REQUIRED: 'This student is the primary guardian of a household with other members. Assign another primary guardian in Odoo before archiving.',
+  PORTAL_ACCESS_REVIEW_REQUIRED: 'This student has an active portal login. An administrator must review that account in Odoo before archiving.',
+  MEMBER_UNAVAILABLE: 'This member is unavailable with your current access. They may be archived.',
+  COURSE_UNAVAILABLE: 'That course is no longer available in this school. Refresh and choose again.',
+  COURSE_ROSTER_CHANGED: 'The course roster changed since you chose these students. Refresh the roster and review again.',
+  CAPACITY_REVIEW_REQUIRED: 'One or more upcoming classes would exceed capacity. Nothing was changed; adjust the selection or class capacity first.',
+  ASSIGNMENT_REVIEW_CHANGED: 'Bookings or preferences changed after review. Review the assignment again before confirming.',
+  PROVIDER_NOT_CONFIGURED: 'Messaging is not configured. Your draft remains saved.',
+  GUARDIAN_REVIEW_REQUIRED: 'A manager must verify this sender’s guardian authority before continuing.',
+  INSTRUCTOR_PROFILE_REQUIRED: 'Your account needs an active instructor profile linked to its employee record at this school.',
+  INSTRUCTOR_DETAILS_UNAVAILABLE: 'Instructor records could not be verified. Refresh before continuing.',
+  PIN_INCORRECT: 'The instructor PIN is incorrect. No shift was changed.',
+  PIN_LOCKED: 'Too many incorrect PIN attempts. Wait for the configured lockout to expire or contact your administrator.',
+  ALREADY_CLOCKED_IN: 'You are already clocked in. Refresh to see the existing shift.',
+  SHIFT_CHANGED: 'The active shift changed. Refresh and review it before clocking out.',
+  SHIFT_UNAVAILABLE: 'This shift is unavailable with your current school access.',
+  TIMESHEET_REVIEW_REQUIRED: 'Only closed draft shifts can be corrected here. Use the native HR workflow for validated or open shifts.',
+  INVALID_SHIFT_TIMES: 'Use a closed shift of up to 24 hours, with clock-out after clock-in and neither time in the future.',
+  REPORT_TOO_LARGE: 'This report exceeds the safe display limit. Use a smaller date range or the native Odoo report.',
+  INVALID_REPORT_RANGE: 'Choose a valid date range of at most 31 days.',
   CONSENT_UNCHANGED: 'That consent decision is already recorded.',
   CONTACT_UNAVAILABLE: 'That contact is not the student or a household guardian.',
   CONTACT_ADDRESS_REQUIRED: 'This contact has no address for that channel in Odoo.',
@@ -133,6 +176,24 @@ export async function runHubAction(
       result.state==='attendance_recorded' ? `Attendance saved in Odoo: ${result.before} → ${result.after}.${result.reversal?' The original check-in record and receipt are kept; no class credit was refunded.':''}` :
       result.state==='waiver_signed' ? `Waiver signed by ${result.signedBy} and stored in Odoo${result.pdfStored ? ' with the signed PDF' : '. The signature is saved; the PDF could not be generated here'}. No message was sent.` :
       result.state==='consent_recorded' ? 'Consent saved in Odoo with its source and evidence. No message was sent.' :
+      result.state==='refund_requested' ? 'Refund request saved for owner approval. No credit note was posted and no money was returned.' :
+      result.state==='refund_approved' ? `Refund approved: credit note ${result.creditNote} posted in Odoo. Money has not been returned yet.` :
+      result.state==='refund_payment_recorded' ? `Refund payment ${result.payment} recorded by staff in Odoo.` :
+      result.state==='refund_cancelled' ? 'Refund request cancelled. No accounting entry was created.' :
+      result.state==='broadcast_awaiting_approval' ? `Broadcast saved for approval with ${result.recipients ?? 0} recipients. Nothing is queued or sent yet.` :
+      result.state==='broadcast_approved' ? `Broadcast approved: ${result.queued ?? 0} messages queued${result.provider==='not_configured'?'. No provider is connected, so nothing is sent':' for the provider. They count as sent only when the provider confirms'}.` :
+      result.state==='broadcast_cancelled' ? 'Broadcast cancelled. Nothing was sent.' :
+      result.state==='automation_paused' ? 'Automation paused in Odoo. It will not run until resumed.' :
+      result.state==='automation_resumed' ? 'Automation resumed in Odoo.' :
+      result.state==='guardian_pin_set' ? 'Kiosk PIN saved in Odoo as a secure hash. It was not sent anywhere; give it to the parent in person.' :
+      result.state==='guardian_pin_revoked' ? 'Kiosk PIN turned off in Odoo. The parent can no longer check in at the kiosk with it.' :
+      result.state==='promotion_reversed' ? `Promotion reversed in Odoo: ${result.before} → ${result.after}. The award is kept in history with your reason.` :
+      result.state==='archived' ? `Student archived in Odoo. ${Array.isArray(result.cancelledBookingIds)?result.cancelledBookingIds.length:0} future bookings were cancelled; attendance history is kept.` :
+      result.state==='restored' ? 'Student restored in Odoo. Previously cancelled bookings were not re-created.' :
+      result.state==='course_roster_updated' ? `Course roster updated in Odoo: ${result.bookingsCreated ?? 0} bookings created, ${result.bookingsCancelled ?? 0} cancelled.` :
+      result.state==='clocked_in' ? 'Clock-in confirmed in Odoo.' :
+      result.state==='clocked_out' ? 'Clock-out confirmed in Odoo.' :
+      result.state==='timesheet_corrected' ? 'Timesheet correction confirmed in Odoo. Payroll has not been approved.' :
       result.state==='testing_roster_saved' ? `Testing roster saved in Odoo with ${result.count ?? 0} students. No rank, invoice or message was created.` :
       result.state==='test_results_saved' ? `Test results saved in Odoo (${Array.isArray(result.changes)?result.changes.length:0} changed). No belt was awarded yet.` :
       result.state==='promotions_awarded' ? `Promotions saved in Odoo: ${Array.isArray(result.promotions)?result.promotions.length:0} belt awards. No message or invoice.` :
@@ -154,21 +215,18 @@ export async function runHubAction(
 }
 
 /**
- * Calls one hub operation through /api/hub. Throws an Error whose message is
- * the hub error code, so runHubAction can explain it. Writes need a requestKey:
- * make one per intended action and reuse it when retrying that action.
+ * Calls an /api/v2 route. Throws an Error whose message is the error code, so
+ * runHubAction can explain it. For a write, send the envelope
+ * `{ idempotencyKey, expectedVersion?, payload }`: make one key per intended
+ * action and reuse it when retrying that action.
  */
-export async function callHub<T = Record<string, unknown>>(
-  operation: string,
-  payload: Record<string, unknown> = {},
-  requestKey?: string,
-): Promise<T> {
-  const res = await fetch("/api/hub", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ operation, payload, ...(requestKey ? { requestKey } : {}) }),
+export async function callApi<T = Record<string, unknown>>(path: string, body?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`/api/v2/${path}`, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error?.code ?? "BACKEND_UNAVAILABLE");
   return data as T;
 }

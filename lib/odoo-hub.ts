@@ -12,9 +12,8 @@ import { decryptJson, encryptJson } from '@/lib/crypto';
  * stored; only Odoo's session id is kept, sealed in an HttpOnly cookie that is
  * bound to this Roster user and workspace.
  *
- * Only the operations the architecture doc calls for are allowed (Front Desk,
- * Instructor, Person profile, CRM, Promotion, AI switch). Broadcasts,
- * automations, refunds, timesheets, kiosk PINs and inbox replies are not.
+ * Every operation Jodi's hub exposes (her gateway at 07afe25) is allowed, with
+ * the same result checks. Odoo still decides, per staff role, who may run each.
  */
 
 export const HUB_COOKIE = 'roster_odoo_hub';
@@ -22,25 +21,50 @@ const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 const READS = new Set([
   'context',
+  // Members
+  'member_details',
+  'member_workspace',
+  'member_onboarding',
+  'archive_review',
+  'archived_members',
+  // Intake and trials
   'intake_context',
   'intake_preview',
   'trial_context',
   'conversion_preview',
+  // Billing and refunds
   'billing_ledger',
+  'refund_preview',
+  // Classes, courses and attendance
   'attendance_sessions',
   'attendance_sheet',
-  'member_details',
+  'session_roster',
+  'course_roster',
+  'course_assignment_preview',
+  // Waiver, consent, broadcasts, automations
   'waiver_context',
+  'consent_overview',
+  'broadcast_context',
+  'broadcast_preview',
+  'automation_overview',
+  // Guardian kiosk PIN
+  'guardian_kiosk_access',
+  // CRM
   'crm_context',
   'lead_details',
+  // Belt testing
   'testing_eligibility',
   'testing_roster',
   'promotion_preview',
   'promotion_history',
+  // Instructor, reports, setup, AI
+  'instructor_context',
+  'operations_report',
+  'setup_checklist',
   'ai_settings',
 ]);
 
-/** Writes whose result Roster checks before calling it saved (from v1). */
+/** Writes whose result Roster checks before calling it saved. */
 const WRITE_STATES: Record<string, string[]> = {
   create_student: ['student_created'],
   reserve_trial: ['trial_reserved'],
@@ -54,28 +78,59 @@ const WRITE_STATES: Record<string, string[]> = {
   save_testing_roster: ['testing_roster_saved'],
   record_test_results: ['test_results_saved'],
   promote_test_results: ['promotions_awarded'],
+  reverse_promotion: ['promotion_reversed'],
+  archive_member: ['archived'],
+  restore_member: ['restored'],
+  assign_course_members: ['course_roster_updated'],
+  set_guardian_kiosk_pin: ['guardian_pin_set'],
+  revoke_guardian_kiosk_pin: ['guardian_pin_revoked'],
+  create_broadcast: ['broadcast_awaiting_approval'],
+  approve_broadcast: ['broadcast_approved'],
+  cancel_broadcast: ['broadcast_cancelled'],
+  set_automation_active: ['automation_paused', 'automation_resumed'],
+  request_refund: ['refund_requested'],
+  approve_refund: ['refund_approved'],
+  record_refund_payment: ['refund_payment_recorded'],
+  cancel_refund: ['refund_cancelled'],
 };
 
-/** Writes v1 passed through on Odoo's word alone. */
+/** Shift writes: the receipt must carry the exact native shift (see checkShift). */
+const SHIFT_WRITES = new Set(['instructor_clock', 'correct_timesheet']);
+
+/** Writes Jodi's gateway passes through on Odoo's word alone. */
 const PLAIN_WRITES = new Set([
   'book',
   'change_class',
+  'checkout',
   'update_member',
+  'rank',
   'payment_link',
   'create_lead',
   'update_lead',
   'add_lead_note',
   'create_task',
   'complete_task',
+  'propose_stage',
+  'prepare_lead_action',
+  'assign_lead',
   'enable_ai',
+  // Inbox: parent messages, drafts, replies, guardian links, staff accounts
+  'resolve',
+  'draft',
+  'approve_reply',
+  'link_guardian',
+  'provision',
 ]);
 
 const LARGE = new Set(['update_member_photo', 'sign_waiver']);
 const TRIAL_WRITES = new Set(['reserve_trial', 'cancel_trial', 'record_trial_outcome', 'convert_trial']);
 const TESTING_WRITES = new Set(['save_testing_roster', 'record_test_results', 'promote_test_results']);
+const REFUND_WRITES = new Set(['request_refund', 'approve_refund', 'record_refund_payment', 'cancel_refund']);
+const BROADCAST_WRITES = new Set(['create_broadcast', 'approve_broadcast', 'cancel_broadcast']);
+const PIN_WRITES = new Set(['set_guardian_kiosk_pin', 'revoke_guardian_kiosk_pin']);
 
 export function isHubOperation(op: string) {
-  return READS.has(op) || op in WRITE_STATES || PLAIN_WRITES.has(op);
+  return READS.has(op) || op in WRITE_STATES || SHIFT_WRITES.has(op) || PLAIN_WRITES.has(op);
 }
 export function isHubRead(op: string) {
   return READS.has(op);
@@ -132,14 +187,23 @@ async function rpc(c: Config, path: string, params: Record<string, unknown>, ses
   return { response, result: value.result };
 }
 
-type Sealed = { session: string; userId: string; workspaceId: string; scope: string; expires: number };
+/** The staff member's role in their `dojo.hub.grant`, as Odoo reported it at sign-in. */
+export type HubRole = 'owner' | 'manager' | 'instructor' | 'guardian' | 'member';
+const HUB_ROLES: readonly string[] = ['owner', 'manager', 'instructor', 'guardian', 'member'];
+export const isHubRole = (v: unknown): v is HubRole => typeof v === 'string' && HUB_ROLES.includes(v);
+
+type Sealed = { session: string; role: HubRole; userId: string; workspaceId: string; scope: string; expires: number };
 const scopeOf = (c: Config) => `${c.backend}|${c.database}|${c.siteId}`;
 
-export function sealSession(c: Config, session: string, userId: string, workspaceId: string) {
-  return encryptJson({ session, userId, workspaceId, scope: scopeOf(c), expires: Date.now() + SESSION_TTL_MS });
+export function sealSession(c: Config, session: string, role: HubRole, userId: string, workspaceId: string) {
+  return encryptJson({ session, role, userId, workspaceId, scope: scopeOf(c), expires: Date.now() + SESSION_TTL_MS });
 }
 
-/** The Odoo session from the cookie, only if it was sealed for this Roster user and workspace. */
+/**
+ * The Odoo session and hub role from the cookie, only if it was sealed for this
+ * Roster user and workspace. The role is a hint for the UI and early refusals;
+ * Odoo re-checks the grant on every call.
+ */
 export function openSession(c: Config, cookie: string | undefined, userId: string, workspaceId: string) {
   if (!cookie || cookie.length > 4096) return null;
   try {
@@ -152,11 +216,12 @@ export function openSession(c: Config, cookie: string | undefined, userId: strin
       v.expires <= Date.now() ||
       v.expires > Date.now() + SESSION_TTL_MS ||
       typeof v.session !== 'string' ||
-      !/^[A-Za-z0-9_-]{32,128}$/.test(v.session)
+      !/^[A-Za-z0-9_-]{32,128}$/.test(v.session) ||
+      !isHubRole(v.role)
     ) {
       return null;
     }
-    return v.session;
+    return { session: v.session, role: v.role };
   } catch {
     return null;
   }
@@ -184,11 +249,12 @@ export async function connectHub(c: Config, login: string, password: string) {
   const context = await rpc(c, '/companion/hub/action', { siteId: c.siteId, operation: 'context', payload: {} }, session).catch(
     () => null,
   );
-  if (!context || !isObject(context.result) || context.result.error || !isObject(context.result.principal)) {
+  const role = isObject(context?.result) && isObject(context.result.principal) ? context.result.principal.role : null;
+  if (!context || !isObject(context.result) || context.result.error || !isHubRole(role)) {
     await rpc(c, '/web/session/destroy', {}, session, 5000).catch(() => undefined);
     throw new HubError('NO_SITE_ACCESS', 403);
   }
-  return { session, context: context.result };
+  return { session, role, context: context.result };
 }
 
 /** Ends the Odoo session. Returns whether Odoo confirmed it. */
@@ -239,7 +305,9 @@ export async function runHub(
 
   const unconfirmed = () => new HubError('BACKEND_UNAVAILABLE_RETRY_SAME_ACTION', 503);
 
-  if (operation === 'create_student') {
+  if (SHIFT_WRITES.has(operation)) {
+    if (!shiftMatches(operation, payload, result)) throw unconfirmed();
+  } else if (operation === 'create_student') {
     if (
       result.state !== 'student_created' ||
       typeof result.memberId !== 'string' ||
@@ -263,7 +331,20 @@ export async function runHub(
   return result;
 }
 
-/** The write's receipt names the same record the request asked about (from v1). */
+/** A clock or correction receipt names the exact native shift, open or closed as expected. */
+function shiftMatches(op: string, p: Record<string, unknown>, r: Record<string, unknown>) {
+  const shift = r.shift;
+  const expected = op === 'correct_timesheet' ? 'timesheet_corrected' : p.direction === 'in' ? 'clocked_in' : 'clocked_out';
+  const isTime = (v: unknown) => typeof v === 'string' && Number.isFinite(Date.parse(v));
+  if (r.state !== expected || !isObject(shift) || typeof shift.id !== 'string' || !/^[1-9][0-9]*$/.test(shift.id)) return false;
+  if (!isTime(shift.checkIn)) return false;
+  if (expected === 'clocked_in' ? shift.checkOut !== null : !isTime(shift.checkOut)) return false;
+  if (op === 'correct_timesheet' && shift.id !== p.shiftId) return false;
+  if (op === 'instructor_clock' && p.direction === 'out' && shift.id !== p.currentShiftId) return false;
+  return true;
+}
+
+/** The write's receipt names the same record the request asked about, and claims no side effect it must not have. */
 function writeMatches(op: string, p: Record<string, unknown>, r: Record<string, unknown>) {
   if (TESTING_WRITES.has(op)) {
     return (
@@ -272,6 +353,35 @@ function writeMatches(op: string, p: Record<string, unknown>, r: Record<string, 
       (op !== 'promote_test_results' || (r.messageSent === false && r.invoiceCreated === false))
     );
   }
+  if (op === 'reverse_promotion') return r.rankHistoryId === p.rankHistoryId;
+  if (REFUND_WRITES.has(op)) {
+    // Money only counts as returned once staff record the refund payment.
+    return (
+      typeof r.refundId === 'string' &&
+      (op === 'request_refund' ? r.memberId === p.memberId : r.refundId === p.refundId) &&
+      r.moneyReturned === (op === 'record_refund_payment')
+    );
+  }
+  if (BROADCAST_WRITES.has(op)) {
+    return (
+      typeof r.broadcastId === 'string' &&
+      (op === 'create_broadcast' || r.broadcastId === p.broadcastId) &&
+      r.messageSent === false
+    );
+  }
+  if (op === 'set_automation_active') {
+    return r.automationId === p.automationId && r.state === (p.active ? 'automation_resumed' : 'automation_paused');
+  }
+  if (PIN_WRITES.has(op)) {
+    // The PIN must never come back in the receipt.
+    return (
+      r.memberId === p.memberId &&
+      r.guardianId === p.guardianId &&
+      r.messageSent === false &&
+      !JSON.stringify(r).includes(String(p.pin ?? '\u0000'))
+    );
+  }
+  if (op === 'assign_course_members') return r.templateId === p.templateId;
   if (op === 'sign_waiver') {
     return r.memberId === p.memberId && r.messageSent === false && !JSON.stringify(r).includes('base64');
   }
