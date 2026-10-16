@@ -1,0 +1,955 @@
+// Roster — AI-Powered Business Assistant
+// Schema covers all four build phases. Every tenant-owned row carries
+// workspaceId; every query in /lib and /app/api scopes on it (spec §9).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  super_admin
+  agency_admin
+  workspace_admin
+  staff
+}
+
+enum AiProvider {
+  claude
+  openai
+}
+
+enum LeadSource {
+  maps
+  manual
+  inbound
+  import
+}
+
+enum LeadStatus {
+  new
+  contacted
+  booked
+  won
+  lost
+}
+
+enum DealStatus {
+  open
+  won
+  lost
+}
+
+enum Channel {
+  chat
+  voice
+  sms
+  email
+  whatsapp
+  facebook
+  instagram
+}
+
+enum Direction {
+  in
+  out
+}
+
+enum SenderType {
+  ai
+  human
+  contact
+  system
+}
+
+enum AppointmentStatus {
+  scheduled
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+enum TriggerType {
+  no_activity
+  lead_created
+  lead_status_changed
+  appointment_booked
+  appointment_completed
+  invoice_paid
+  missed_call
+  tag_added
+  manual
+}
+
+enum StepAction {
+  send_email
+  send_sms
+  send_push
+  add_tag
+  remove_tag
+  change_stage
+  create_task
+  notify_team
+  request_review
+  wait
+}
+
+enum RunStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum ReviewStatus {
+  new
+  drafted
+  approved
+  responded
+  ignored
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  overdue
+  void
+}
+
+enum PaymentProvider {
+  stripe
+  paystack
+  crypto
+  manual
+}
+
+enum CryptoAsset {
+  BTC
+  ETH
+  USDT_TRON
+  USDC_TRON
+}
+
+/// Transactional emails a buyer can restyle. Each maps to one send site.
+/**
+ * Buyer-authored public pages — privacy policy, terms, refund policy and the
+ * like. Shipped as an empty table with starter drafts seeded, because a
+ * product that takes payments needs these and a buyer should not have to edit
+ * React to publish one.
+ */
+model SitePage {
+  id           String   @id @default(cuid())
+  /// Global, not per workspace: these are the public site's pages, and in
+  /// agency mode a sub-account must not be able to rewrite the host's terms.
+  slug         String   @unique
+  title        String
+  /// Markdown-ish body. Rendered with a strict allowlist, never dangerouslySetInnerHTML.
+  content      String   @db.Text
+  isPublished  Boolean  @default(false)
+  /// Shown in the marketing footer when published.
+  showInFooter Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isPublished, sortOrder])
+  @@map("site_pages")
+}
+
+enum EmailTemplateKind {
+  shell // the wrapper every email is rendered inside
+  invoice
+  appointment_reminder
+  review_request
+  retention
+  inbox_reply
+}
+
+enum CryptoNetwork {
+  mainnet
+  testnet
+}
+
+enum CryptoPaymentStatus {
+  awaiting // address issued, nothing seen on-chain yet
+  detected // a transaction is in the mempool or has 1+ confirmations
+  confirmed // met the confirmation threshold; invoice marked paid
+  underpaid // arrived, but short of the quoted amount
+  expired // the rate lock elapsed with nothing received
+}
+
+enum LicenseStatus {
+  unverified
+  active
+  invalid
+  domain_mismatch
+}
+
+enum JobStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+enum UsageMetric {
+  ai_tokens_in
+  ai_tokens_out
+  sms_sent
+  calls_minutes
+  emails_sent
+  push_sent
+  leads_gathered
+}
+
+enum CalendarProvider {
+  google
+  outlook
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tenancy
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A buyer's *watch-only* extended public key, one per asset.
+ * Deliberately holds no private key or mnemonic: Roster derives receiving
+ * addresses from this and can never spend. `nextIndex` advances per issued
+ * invoice so no two customers are ever shown the same address, which is what
+ * makes an incoming payment attributable.
+ */
+/**
+ * Per-workspace override for one transactional email.
+ * Absent means the built-in renderer is used, so an untouched install keeps
+ * working and a buyer only owns the templates they actually edited.
+ */
+model EmailTemplate {
+  id          String            @id @default(cuid())
+  workspaceId String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind        EmailTemplateKind
+  subject     String?
+  /// Full HTML. For `shell`, {{content}} marks where the body is injected.
+  html        String            @db.Text
+  isActive    Boolean           @default(true)
+  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime          @default(now())
+
+  @@unique([workspaceId, kind])
+  @@map("email_templates")
+}
+
+model CryptoWallet {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  asset       CryptoAsset
+  /// Bitcoin infers this from the key prefix (tpub/vpub); Ethereum and Tron
+  /// share address formats across networks, so they must be told explicitly.
+  network     CryptoNetwork @default(mainnet)
+  extendedKey String        @db.Text
+  // Label the buyer gave the source wallet, e.g. "Ledger Nano / Bitcoin".
+  label       String?
+  nextIndex   Int           @default(0)
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  payments CryptoPayment[]
+
+  @@unique([workspaceId, asset])
+  @@map("crypto_wallets")
+}
+
+/**
+ * One issued payment request against one invoice.
+ * `amount` is locked at `quotedAt` because a fiat invoice paid in a volatile
+ * asset would otherwise drift — hence `expiresAt`, after which the customer is
+ * re-quoted rather than underpaying.
+ */
+model CryptoPayment {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  walletId    String
+  wallet      CryptoWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  asset           CryptoAsset
+  network         CryptoNetwork @default(mainnet)
+  address         String
+  derivationIndex Int
+  // Crypto amount owed, in whole units. Decimal, never float — 0.1 + 0.2 in
+  // binary floating point is not 0.3, and this is money.
+  amount          Decimal       @db.Decimal(30, 18)
+  fiatAmount      Decimal       @db.Decimal(14, 2)
+  fiatCurrency    String
+  rate            Decimal       @db.Decimal(30, 12)
+
+  status          CryptoPaymentStatus @default(awaiting)
+  receivedAmount  Decimal             @default(0) @db.Decimal(30, 18)
+  /// Balance already on the address when this request was issued. Chains
+  /// without cheap per-transaction history (Ethereum) settle on the *increase*
+  /// over this, so a reused xpub with prior funds cannot pay an invoice.
+  baselineAmount  Decimal             @default(0) @db.Decimal(30, 18)
+  txHash          String?
+  confirmations   Int                 @default(0)
+  /// Chain height when the payment was first seen. Persisted because
+  /// balance-based chains (Ethereum) have no transaction to anchor depth to,
+  /// and deriving it from the stored confirmation count is circular — the
+  /// count could never grow past its initial value.
+  detectedAtBlock Int?
+
+  quotedAt      DateTime  @default(now())
+  expiresAt     DateTime
+  detectedAt    DateTime?
+  confirmedAt   DateTime?
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([address, asset])
+  @@index([workspaceId, status])
+  @@index([status, expiresAt])
+  @@index([invoiceId])
+  @@map("crypto_payments")
+}
+
+model Workspace {
+  id           String      @id @default(cuid())
+  name         String
+  slug         String      @unique
+  customDomain String?     @unique
+  logoUrl      String?
+  accentColor  String? // white-label override for --color-accent
+  plan         String      @default("standard")
+  timezone     String      @default("UTC")
+  currency     String      @default("USD")
+  // Agency reselling: a workspace may belong to a parent agency workspace.
+  parentId     String?
+  parent       Workspace?  @relation("AgencyChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Workspace[] @relation("AgencyChildren")
+
+  // Business profile fed into the agent system prompt.
+  businessName    String?
+  businessPhone   String?
+  businessEmail   String?
+  businessAddress String?
+  businessHours   Json?
+  services        Json?
+  niche           String?
+
+  onboardedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  users             User[]
+  agents            AiAgent[]
+  leads             Lead[]
+  contacts          Contact[]
+  pipelineStages    PipelineStage[]
+  deals             Deal[]
+  conversations     Conversation[]
+  calls             Call[]
+  appointments      Appointment[]
+  retentionRules    RetentionRule[]
+  retentionRuns     RetentionRun[]
+  reviews           Review[]
+  invoices          Invoice[]
+  license           License?
+  integrations      Integration[]
+  knowledgeDocs     KnowledgeDoc[]
+  usageRecords      UsageRecord[]
+  leadGatherJobs    LeadGatherJob[]
+  pushSubscriptions PushSubscription[]
+  calendarAccounts  CalendarAccount[]
+  activities        Activity[]
+  tasks             Task[]
+  emailTemplates    EmailTemplate[]
+  cryptoWallets     CryptoWallet[]
+  cryptoPayments    CryptoPayment[]
+
+  @@index([parentId])
+  @@map("workspaces")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  workspaceId  String?
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role         Role       @default(staff)
+  email        String     @unique
+  name         String?
+  passwordHash String
+  avatarUrl    String?
+  isActive     Boolean    @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  assignedLeads     Lead[]             @relation("LeadOwner")
+  activities        Activity[]
+  tasks             Task[]
+  pushSubscriptions PushSubscription[]
+
+  @@index([workspaceId])
+  @@map("users")
+}
+
+/// Encrypted third-party credentials, scoped per workspace (spec §9 Security).
+/// `credentials` holds an AES-256-GCM ciphertext envelope, never plaintext.
+model Integration {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider    String // anthropic | openai | twilio | stripe | paystack | smtp | google_maps | fcm
+  label       String?
+  credentials String    @db.Text
+  config      Json?
+  isActive    Boolean   @default(true)
+  lastTestAt  DateTime?
+  lastTestOk  Boolean?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+  @@map("integrations")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI agents & knowledge
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AiAgent {
+  id              String     @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name            String
+  provider        AiProvider @default(claude)
+  model           String     @default("claude-opus-5")
+  personaPrompt   String     @db.Text
+  greeting        String?    @db.Text
+  tone            String     @default("professional")
+  escalationRules Json? // { keywords: [], afterTurns: n, notifyEmails: [] }
+  channels        String[]   @default(["chat"])
+  temperature     Float?
+  maxTokens       Int        @default(2048)
+  isActive        Boolean    @default(true)
+  isDefault       Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  conversations Conversation[]
+  knowledgeDocs KnowledgeDoc[]
+
+  @@index([workspaceId])
+  @@map("ai_agents")
+}
+
+model KnowledgeDoc {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentId     String?
+  agent       AiAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  title       String
+  kind        String    @default("doc") // doc | faq | pricing | policy
+  content     String    @db.Text
+  sourceUrl   String?
+  tokens      Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@map("knowledge_docs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CRM
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Lead {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source        LeadSource     @default(manual)
+  businessName  String
+  contactName   String?
+  phone         String?
+  email         String?
+  website       String?
+  address       String?
+  city          String?
+  country       String?
+  niche         String?
+  category      String?
+  rating        Float?
+  reviewCount   Int?
+  googlePlaceId String?
+  status        LeadStatus     @default(new)
+  notes         String?        @db.Text
+  ownerId       String?
+  owner         User?          @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  gatherJobId   String?
+  gatherJob     LeadGatherJob? @relation(fields: [gatherJobId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  contact Contact?
+
+  @@unique([workspaceId, googlePlaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, phone])
+  @@index([gatherJobId])
+  @@map("leads")
+}
+
+model Contact {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId         String?   @unique
+  lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  name           String
+  phone          String?
+  email          String?
+  company        String?
+  tags           String[]  @default([])
+  customFields   Json?
+  timezone       String?
+  lastActivityAt DateTime?
+  optedOutSms    Boolean   @default(false)
+  optedOutEmail  Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  deals         Deal[]
+  conversations Conversation[]
+  calls         Call[]
+  appointments  Appointment[]
+  reviews       Review[]
+  invoices      Invoice[]
+  activities    Activity[]
+  retentionRuns RetentionRun[]
+  tasks         Task[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, phone])
+  @@index([workspaceId, email])
+  @@map("contacts")
+}
+
+model PipelineStage {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  key         String // new | contacted | booked | won | lost | custom slug
+  order       Int       @default(0)
+  color       String?
+  isWon       Boolean   @default(false)
+  isLost      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  deals Deal[]
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId])
+  @@map("pipeline_stages")
+}
+
+model Deal {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId   String
+  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  stageId     String
+  stage       PipelineStage @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  title       String
+  value       Decimal       @default(0) @db.Decimal(14, 2)
+  currency    String        @default("USD")
+  status      DealStatus    @default(open)
+  order       Int           @default(0)
+  closedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([workspaceId, stageId])
+  @@index([contactId])
+  @@map("deals")
+}
+
+model Activity {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId   String?
+  contact     Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type        String // note | call | message | email | stage_change | appointment | invoice | review | system
+  title       String
+  body        String?   @db.Text
+  meta        Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([contactId, createdAt])
+  @@map("activities")
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId   String?
+  contact     Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?     @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  title       String
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@map("tasks")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Conversations / inbox
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Conversation {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId     String?
+  contact       Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  agentId       String?
+  agent         AiAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  channel       Channel
+  subject       String?
+  externalId    String? // widget session, Twilio SID, email thread id
+  isOpen        Boolean   @default(true)
+  needsHuman    Boolean   @default(false)
+  lastMessageAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  messages Message[]
+
+  @@index([workspaceId, lastMessageAt])
+  @@index([contactId])
+  @@index([externalId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      Direction
+  sender         SenderType
+  body           String       @db.Text
+  mediaUrl       String?
+  meta           Json?
+  tokensIn       Int?
+  tokensOut      Int?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model Call {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId       String?
+  contact         Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  direction       Direction
+  fromNumber      String
+  toNumber        String
+  providerCallSid String?   @unique
+  durationSeconds Int       @default(0)
+  recordingUrl    String?
+  transcript      String?   @db.Text
+  summary         String?   @db.Text
+  missed          Boolean   @default(false)
+  textBackSent    Boolean   @default(false)
+  status          String    @default("initiated")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([workspaceId, createdAt])
+  @@index([contactId])
+  @@map("calls")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scheduling
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CalendarAccount {
+  id           String           @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider     CalendarProvider
+  accountEmail String
+  calendarId   String?
+  accessToken  String           @db.Text // encrypted envelope
+  refreshToken String?          @db.Text // encrypted envelope
+  expiresAt    DateTime?
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  appointments Appointment[]
+
+  @@unique([workspaceId, provider, accountEmail])
+  @@index([workspaceId])
+  @@map("calendar_accounts")
+}
+
+model Appointment {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId         String
+  contact           Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  calendarAccountId String?
+  calendarAccount   CalendarAccount?  @relation(fields: [calendarAccountId], references: [id], onDelete: SetNull)
+  calendarEventId   String?
+  title             String
+  notes             String?           @db.Text
+  location          String?
+  startsAt          DateTime
+  endsAt            DateTime
+  status            AppointmentStatus @default(scheduled)
+  reminderSent      Boolean           @default(false)
+  bookedByAgent     Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([workspaceId, startsAt])
+  @@index([contactId])
+  @@map("appointments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retention engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+model RetentionRule {
+  id            String      @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  triggerType   TriggerType
+  triggerConfig Json        @default("{}") // { days: 14, status: "won", tag: "vip" }
+  audience      Json? // { tags: [], statuses: [] }
+  steps         Json        @default("[]") // RetentionStep[] — see lib/retention.ts
+  isActive      Boolean     @default(false)
+  lastRunAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  runs RetentionRun[]
+
+  @@index([workspaceId, isActive])
+  @@map("retention_rules")
+}
+
+model RetentionRun {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ruleId      String
+  rule        RetentionRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  contactId   String
+  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  stepIndex   Int           @default(0)
+  status      RunStatus     @default(pending)
+  nextRunAt   DateTime?
+  lastError   String?       @db.Text
+  isDryRun    Boolean       @default(false)
+  log         Json          @default("[]")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([ruleId, contactId])
+  @@index([workspaceId, status])
+  @@index([nextRunAt])
+  @@map("retention_runs")
+}
+
+model PushSubscription {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId   String?
+  endpoint    String    @unique @db.Text
+  p256dh      String
+  auth        String
+  fcmToken    String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@map("push_subscriptions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reputation
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Review {
+  id              String       @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId       String?
+  contact         Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  source          String       @default("google")
+  externalId      String?
+  authorName      String?
+  rating          Int
+  body            String       @db.Text
+  aiResponseDraft String?      @db.Text
+  publishedReply  String?      @db.Text
+  status          ReviewStatus @default(new)
+  reviewedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([workspaceId, source, externalId])
+  @@index([workspaceId, status])
+  @@map("reviews")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invoicing & payments
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id             String          @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId      String
+  contact        Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  number         String
+  isEstimate     Boolean         @default(false)
+  lineItems      Json            @default("[]") // { description, quantity, unitPrice }[]
+  subtotal       Decimal         @default(0) @db.Decimal(14, 2)
+  taxRate        Decimal         @default(0) @db.Decimal(5, 2)
+  amount         Decimal         @default(0) @db.Decimal(14, 2)
+  currency       String          @default("USD")
+  status         InvoiceStatus   @default(draft)
+  provider       PaymentProvider @default(stripe)
+  payLink        String?         @db.Text
+  externalRef    String?
+  dueAt          DateTime?
+  sentAt         DateTime?
+  paidAt         DateTime?
+  notes          String?         @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  cryptoPayments CryptoPayment[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+  @@index([contactId])
+  @@map("invoices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lead generation jobs
+// ─────────────────────────────────────────────────────────────────────────────
+
+model LeadGatherJob {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  countries   String[]  @default([])
+  niche       String
+  targetCount Int       @default(50)
+  foundCount  Int       @default(0)
+  savedCount  Int       @default(0)
+  dupeCount   Int       @default(0)
+  status      JobStatus @default(queued)
+  error       String?   @db.Text
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  leads Lead[]
+
+  @@index([workspaceId, createdAt])
+  @@map("lead_gather_jobs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metering & licensing
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UsageRecord {
+  id          String      @id @default(cuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  metric      UsageMetric
+  quantity    Int         @default(0)
+  // Bucketed to the day so metering stays cheap to aggregate.
+  day         DateTime    @db.Date
+  meta        Json?
+
+  @@unique([workspaceId, metric, day])
+  @@index([workspaceId, day])
+  @@map("usage_records")
+}
+
+model License {
+  id                 String        @id @default(cuid())
+  workspaceId        String        @unique
+  workspace          Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  envatoPurchaseCode String
+  buyerName          String?
+  itemName           String?
+  supportedUntil     DateTime?
+  domain             String
+  verifiedAt         DateTime?
+  lastCheckedAt      DateTime?
+  status             LicenseStatus @default(unverified)
+  message            String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@map("licenses")
+}
+
+/// Single-row table recording installer completion (spec §9 Installer).
+model SystemSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}

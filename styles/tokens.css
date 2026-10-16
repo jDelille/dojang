@@ -1,0 +1,143 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Roster — "Front Desk" design tokens (Vercel design outline)
+
+   Dark is the primary theme. Red is the primary action (Check in, Save) and
+   nothing else. Amber marks the active rail section only. Violet belongs to
+   the agent ("Do For Me") and is never used for app chrome.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Tells the browser which way to paint the things CSS cannot reach:
+     scrollbars, <select> popups, date pickers, autofill, spellcheck
+     underlines. Without it those stay light-on-light in dark mode. */
+  color-scheme: light;
+
+  --color-ink: #0f0f12; /* base text */
+  --color-paper: #f6f6f7; /* workspace background */
+  --color-accent: #d4142a; /* primary action red */
+  --color-accent-dark: #b2101f; /* red hover/pressed */
+  --color-slate: #6b6b74; /* secondary text, muted labels */
+  --color-slate-100: #e2e2e6; /* borders / dividers */
+  --color-success: #16a34a;
+  --color-alert: #dc2626;
+  --color-warning: #ca8a04;
+  --color-surface: #ffffff; /* cards */
+  --color-surface-dark: #17171b; /* dark-mode card */
+
+  /* Shell layers: canvas sits outside the rounded app frame, panel is the
+     rail / context / agent columns, inset is the stat tile inside a card. */
+  --color-canvas: #e9e9ec;
+  --color-panel: #fbfbfc;
+  --color-inset: #f2f2f4;
+  --color-nav: #b8741a; /* active rail section (amber, darkened for contrast) */
+  --color-agent: #7c3aed; /* Do For Me */
+  --color-agent-fg: #ffffff;
+  --color-live: #16a34a; /* online / context dots */
+
+  /* Derived — kept as tokens so dark mode can remap them in one place. */
+  --color-bg: var(--color-paper);
+  --color-fg: var(--color-ink);
+  --color-fg-muted: var(--color-slate);
+  --color-border: var(--color-slate-100);
+  --color-elevated: var(--color-surface);
+  --color-accent-fg: #ffffff; /* readable text on red */
+
+  /* Type scale (rem) — 0.75 / 0.875 / 1 / 1.125 / 1.25 / 1.5 / 1.875 / 2.25 / 3 */
+  --text-2xs: 0.75rem;
+  --text-xs: 0.875rem;
+  --text-sm: 1rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.875rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: 3rem;
+
+  /* 8px base spacing grid */
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2rem;
+  --space-5: 3rem;
+  --space-6: 4rem;
+
+  --radius-card: 10px;
+  --radius-control: 6px;
+  --radius-pill: 999px;
+
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --color-bg: #0b0b0d;
+  --color-fg: #f4f4f5;
+  --color-fg-muted: #8b8b94;
+  --color-border: #2a2a31;
+  --color-elevated: var(--color-surface-dark);
+  --color-slate-100: #2a2a31;
+  --color-slate: #8b8b94;
+  --color-paper: #0b0b0d;
+  --color-surface: #17171b;
+  --color-ink: #f4f4f5;
+  --color-accent: #e5182f;
+  --color-accent-dark: #c41326;
+  --color-success: #22c55e;
+  --color-alert: #ef4444;
+  --color-warning: #eab308;
+
+  --color-canvas: #050506;
+  --color-panel: #0e0e10;
+  --color-inset: #1e1e23;
+  --color-nav: #e8a33d;
+  --color-agent: #8b5cf6;
+  --color-live: #22c55e;
+}
+
+/* ── Chart palette ───────────────────────────────────────────────────────────
+   Categorical series colors, assigned in fixed order and never cycled.
+   Both sets are validated with the dataviz palette validator:
+
+     light  (surface #FFFFFF): lightness band PASS · chroma PASS ·
+              CVD separation PASS (worst adjacent ΔE 12.1 deutan) ·
+              normal-vision PASS (worst ΔE 18.2) ·
+              contrast WARN on --chart-1 (2.16:1) → charts carry direct labels
+              and a table view, which is the required relief.
+     dark   (surface #15171C): all six checks PASS.
+
+   The dark steps are chosen against the dark surface, not flipped from light —
+   --chart-1 in particular is a genuinely darker amber to sit in the L band.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --chart-1: #e8a33d; /* amber — brand series */
+  --chart-2: #3579b5; /* blue */
+  --chart-3: #3f9e6a; /* green */
+  --chart-4: #9166d6; /* violet */
+  --chart-5: #cc5555; /* red */
+  --chart-6: #1f9ea8; /* teal */
+  --chart-grid: var(--color-slate-100);
+  --chart-axis: var(--color-slate);
+  /* Sequential ramp — one hue, light→dark. Never a rainbow. */
+  --chart-seq-1: #fbeed8;
+  --chart-seq-2: #f3d5a3;
+  --chart-seq-3: #e8a33d;
+  --chart-seq-4: #c6842a;
+  --chart-seq-5: #8f5d18;
+}
+
+.dark {
+  --chart-1: #c1852f;
+  --chart-2: #4a90cc;
+  --chart-3: #3fa572;
+  --chart-4: #9a76d6;
+  --chart-5: #d16a6a;
+  --chart-6: #1ea7ad;
+  --chart-seq-1: #3a2f1c;
+  --chart-seq-2: #6b5220;
+  --chart-seq-3: #a4762a;
+  --chart-seq-4: #c1852f;
+  --chart-seq-5: #e0a54c;
+}

@@ -1,0 +1,55 @@
+# Roster web application.
+#
+#   sudo cp deploy/roster-*.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now roster-web roster-worker
+#
+# Change User, WorkingDirectory and the node/npm paths to match your server.
+# `which node` and `which npm` print the two you need.
+
+[Unit]
+Description=Roster web application
+Documentation=file:///opt/roster/documentation/index.html
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+# StartLimit* belong to [Unit], not [Service]; systemd silently ignores them
+# if they are put in the wrong section.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=roster
+Group=roster
+WorkingDirectory=/opt/roster
+
+# Reads DATABASE_URL, REDIS_URL and the rest. Keep it chmod 600 and owned by
+# the service user: it holds ENCRYPTION_KEY.
+EnvironmentFile=/opt/roster/.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+ExecStart=/usr/bin/npm run start
+
+# Give up only after 5 failures inside a minute, so a genuine crash loop does
+# not hammer the database forever.
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=roster-web
+
+# Hardening. Remove any line your host does not support rather than the whole
+# block; each one narrows what a compromised process can reach.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/roster/.next /opt/roster/public/uploads
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

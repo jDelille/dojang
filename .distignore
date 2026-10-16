@@ -1,0 +1,50 @@
+# Paths excluded from the CodeCanyon package, consumed by scripts/package.sh.
+# One rsync-style pattern per line.
+
+# Dependencies and build output — buyers run `npm install` and `npm run build`.
+node_modules
+.next
+out
+dist
+build
+*.tsbuildinfo
+next-env.d.ts
+
+# Version control and editor state.
+.git
+.gitignore
+.vscode
+.idea
+*.iml
+.DS_Store
+
+# Secrets and per-machine state. `.env.example` is deliberately NOT excluded —
+# buyers need it, and a blanket `.env*` rule would take it with the rest.
+.env
+.env.local
+.env.production
+.env.development
+*.env
+.roster-installed
+uploads
+*.log
+*.pem
+*.key
+*.keystore
+*.jks
+*firebase-adminsdk*
+
+# Marketing images for the CodeCanyon listing description. They are served
+# from the demo site, not shipped to buyers.
+public/preview
+
+# Author-internal: specs, compliance notes, submission metadata, packaging and
+# licence-issuing tools. None of these are for buyers.
+CODECANYON_COMPLIANCE.md
+roster-build-spec.md
+submission
+package
+scripts/package.sh
+scripts/build-docs.py
+scripts/build-doc-pdf.mjs
+scripts/issue-license.ts

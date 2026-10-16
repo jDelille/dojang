@@ -1,0 +1,176 @@
+/**
+ * Hub UI feedback, ported from v1 `src/domain/hub-actions.ts` (out-of-scope
+ * operations removed). UI feedback only: Odoo remains authoritative for
+ * eligibility and writes.
+ */
+export type ActionFeedback = {
+  kind: 'success' | 'error' | 'uncertain';
+  text: string;
+  refreshWarning?: string;
+  intake?: {memberId: string; memberNumber: string};
+  testing?: {testId: string};
+  checkout?: {url: string; invoiceId: string; invoiceNumber: string; amount: number; currency: string};
+};
+
+const messages: Record<string, string> = {
+  TRIAL_STUDENT_REVIEW_REQUIRED: 'Only a student in lead or trial status can take a trial. This student already has a membership status.',
+  SIGNATURE_INVALID: 'The signature image could not be read. Clear it and sign again.',
+  SIGNATURE_EMPTY: 'Please sign in the box before saving.',
+  SIGNATURE_AGREEMENT_REQUIRED: 'The signer must confirm they read and agree to the waiver.',
+  WAIVER_TEXT_CHANGED: 'The waiver text changed. Show the signer the current version.',
+  SIGNER_NOT_AUTHORIZED: 'Only the adult student or a household guardian can sign.',
+  WAIVER_ALREADY_SIGNED: 'This student already has a signed waiver in Odoo.',
+  CONSENT_UNCHANGED: 'That consent decision is already recorded.',
+  CONTACT_UNAVAILABLE: 'That contact is not the student or a household guardian.',
+  CONTACT_ADDRESS_REQUIRED: 'This contact has no address for that channel in Odoo.',
+  TEST_UNAVAILABLE: 'That belt test is not available in this school.',
+  TEST_NOT_EDITABLE: 'This belt test is completed or cancelled and can no longer be changed here.',
+  ROSTER_DUPLICATE: 'A student is already on this testing roster.',
+  ROSTER_CHANGED: 'The testing roster changed. Reload it and review again.',
+  TARGET_RANK_NOT_HIGHER: 'The testing rank must be higher than the student’s current belt.',
+  INVALID_RANK: 'That belt rank is not active in this school.',
+  RESULTS_UNCHANGED: 'No results changed.',
+  PROMOTED_RESULT_LOCKED: 'A promoted result cannot be changed. Reverse the promotion first.',
+  PROMOTION_REVIEW_REQUIRED: 'Some selected students cannot be promoted. Review the conflicts.',
+  PROMOTION_REVIEW_CHANGED: 'The promotion review changed. Preview it again before confirming.',
+  TRIAL_ALREADY_OPEN: 'This lead or student already has an open trial. Cancel or complete it first.',
+  TRIAL_REVIEW_REQUIRED: 'This trial can no longer be changed that way. Refresh to see its current status.',
+  TRIAL_NOT_ATTENDED: 'Only an attended, unconverted trial can be converted to a membership.',
+  TRIAL_UNAVAILABLE: 'That trial is no longer available in this school. Refresh the lead.',
+  PLAN_UNAVAILABLE: 'That membership plan is not available in this school.',
+  INVALID_START_DATE: 'Choose a start date from today up to 60 days ahead.',
+  MEMBERSHIP_ALREADY_OPEN: 'This student already has an active, paused or pending membership. Nothing new was created.',
+  CONVERSION_SETUP_REQUIRED: 'Odoo is missing the subscription stage or price list needed to start this plan. An administrator must configure it.',
+  CONVERSION_REVIEW_CHANGED: 'The trial, student or lead changed after the conversion preview. Preview the conversion again.',
+  ATTENDANCE_REVIEW_REQUIRED: 'Attendance is already recorded for this class. Review it in Attendance review.',
+  ATTENDANCE_WINDOW_CLOSED: 'Attendance can be recorded from 15 minutes before a class starts until 31 days after it ends.',
+  ATTENDANCE_UNCHANGED: 'That student already has this attendance status. Nothing was changed.',
+  NOT_ON_ROSTER: 'This student is not registered for that class. Book them first or review the roster.',
+  REVERSAL_REQUIRES_MANAGER: 'Reversing a recorded check-in requires a manager or owner.',
+  CORRECTION_REQUIRES_MANAGER: 'Changing an attendance record that already exists requires a manager or owner.',
+  PHOTO_TOO_LARGE: 'That photo is too large. Choose an image under 300 KB after resizing.',
+  PHOTO_TYPE_UNSUPPORTED: 'Use a JPEG, PNG or WebP photo.',
+  PHOTO_DIMENSIONS: 'Use a photo between 64 and 4096 pixels on each side.',
+  PHOTO_INVALID: 'That file could not be read as an image. Nothing was saved.',
+  INTAKE_FIELDS_REQUIRED: 'Required intake fields are missing or invalid. Choose Review new student to see exactly what needs attention.',
+  INTAKE_REVIEW_CHANGED: 'The intake changed after review. Review the current fields again before creating a student.',
+  INTAKE_DETAILS_UNAVAILABLE: 'The intake review could not be verified. Nothing is confirmed; reload the options and review again.',
+  INTAKE_SCOPE_REVIEW_REQUIRED: 'This school has more records than the bounded intake check can inspect. Ask an administrator to review the native record before creating it.',
+  DUPLICATE_STUDENT_REVIEW_REQUIRED: 'A student with this name and birth date already exists in this school, including archived records. Nothing new was created. Choose Review new student to open the existing profile.',
+  GUARDIAN_DUPLICATE_REVIEW_REQUIRED: 'That guardian contact already appears in this school. Nothing new was created. Choose Review new student to use the matching household; an archived or unlinked contact needs administrator review in Odoo.',
+  GUARDIAN_UNAVAILABLE: 'The selected guardian or household is no longer available in this school. Refresh and select the exact verified relationship again.',
+  HUB_NOT_CONFIGURED: 'The hub connection has not been configured on this deployment.',
+  SIGN_IN_REQUIRED: 'Sign in with your Odoo account.',
+  SIGN_IN_FAILED_OR_MFA_REQUIRED: 'Sign-in failed. Check your credentials. This hub login does not yet support accounts requiring MFA.',
+  NO_SITE_ACCESS: 'This account has not been granted access to this site.',
+  VERSION_CONFLICT: 'This record changed. Refresh and review it again.',
+  BUSINESS_RULE_REVIEW_REQUIRED: 'Odoo could not approve this change. Review the subscription, credits, class roster and available places.',
+  ENROLLMENT_REVIEW_REQUIRED: 'The original registration cannot be replaced. Its class may have started, attendance may already be recorded, or the registration may no longer be active. Review the original record. A separate future booking must still meet Odoo eligibility rules.',
+  SESSION_NOT_OPEN: 'This class is no longer open for booking. Refresh and choose an available future class.',
+  SESSION_FULL: 'This class is full. Choose another available class.',
+  MEMBER_DETAILS_UNAVAILABLE: 'This member’s details could not be verified. Refresh before continuing.',
+  SHARED_CONTACT_REVIEW_REQUIRED: 'This contact is shared or outside this company. Ask an administrator to review it in Odoo; no member was changed.',
+  INVALID_COMMAND: 'This action is unavailable or its fields are invalid. Confirm that the matching frontend and Odoo update are deployed.',
+  INVOICE_UNAVAILABLE: 'This posted invoice is not linked to this member within your school.',
+  PAYMENT_SETUP_REQUIRED: 'Online invoice payment must be enabled in Odoo by your administrator.',
+  PAYMENT_PROVIDER_UNAVAILABLE: 'No published payment provider is available for this invoice’s currency, amount and customer.',
+  INVOICE_NOT_PAYABLE: 'This invoice has no payable balance. Refresh billing to see its current status.',
+  PAYMENT_PENDING_OR_SETTLED: 'A payment may already be processing or completed. Refresh the invoice before starting another payment.',
+  PAYMENT_URL_NOT_CONFIGURED: 'The secure Odoo invoice checkout address has not been configured.',
+  PAYMENT_RESPONSE_INVALID: 'The checkout address could not be verified. No payment was submitted. Refresh and review the invoice.',
+  AI_CONFIGURATION_REQUIRED: 'The running Odoo worker needs its private OpenAI key and supported model configured before activation.',
+  AI_CHECK_FAILED: 'The live drafting check failed. AI settings were not changed; template drafts remain available.',
+  LEAD_UNAVAILABLE: 'This lead is unavailable with your current access. No other record was selected.',
+  TASK_UNAVAILABLE: 'This task is unavailable with your current access.',
+  CRM_SETUP_REQUIRED: 'An administrator must configure an intake stage in Odoo first.',
+  AUTOMATED_TASK_REVIEW_REQUIRED: 'This activity belongs to an automated workflow. Review it in Odoo before completing it.',
+  CRM_DETAILS_UNAVAILABLE: 'CRM records could not be verified. Refresh before continuing.',
+  NOT_CHECKED_IN: 'No eligible check-in was found for this member and class.',
+  PENDING_ACTION: 'Resolve the unconfirmed action before starting another change.',
+  BACKEND_UNAVAILABLE_RETRY_SAME_ACTION: 'Odoo has not confirmed the result. Do not submit a new action. Retry this same action to check its original receipt.',
+};
+
+export function explainHubError(code: string): string {
+  return messages[code] || code.replaceAll('_', ' ').toLowerCase();
+}
+
+export function replacementBlockReason(original: {startsAt: string; future: boolean} | undefined, now: number): string | null {
+  if (!original || !Number.isFinite(Date.parse(original.startsAt))) {
+    return 'The original class could not be verified. Refresh or ask staff to review it before replacing the registration.';
+  }
+  if (!original.future || Date.parse(original.startsAt) <= now) {
+    return 'The original class has already started and cannot be replaced. Keep its attendance history and use Add a class registration for an eligible future makeup class.';
+  }
+  return null;
+}
+
+/** Do not turn an acknowledged write into a failure when its follow-up read fails. */
+export async function runHubAction(
+  send: () => Promise<{plan?: string; membershipState?: string; startDate?: string; enrollmentId?: unknown; memberId?: string; after?: string; before?: string; reversal?: boolean; memberNumber?: string; cancelledBookingIds?: unknown[]; testId?: string; signedBy?: string; pdfStored?: boolean; creditNote?: string; payment?: string; recipients?: number; queued?: number; provider?: string; count?: number; changes?: unknown[]; promotions?: unknown[]; bookingsCreated?: number; bookingsCancelled?: number; checkoutUrl?: string; invoiceId?: string; invoiceNumber?: string; amount?: number; currency?: string; state?: string}>,
+  refresh: () => Promise<void>,
+  onAcknowledged: (feedback: ActionFeedback) => void,
+): Promise<ActionFeedback> {
+  let result: Awaited<ReturnType<typeof send>>;
+  try {
+    result = await send();
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    const uncertain = error instanceof TypeError || error instanceof SyntaxError ||
+      ['AbortError', 'TimeoutError'].includes(error instanceof Error ? error.name : '') ||
+      ['BACKEND_UNAVAILABLE_RETRY_SAME_ACTION', 'BACKEND_UNAVAILABLE', 'CONNECTION_UNAVAILABLE', 'CONCURRENT_RETRY'].includes(code) || !code;
+    return {kind: uncertain ? 'uncertain' : 'error', text: explainHubError(uncertain ? 'BACKEND_UNAVAILABLE_RETRY_SAME_ACTION' : code)};
+  }
+  const feedback: ActionFeedback = {
+    kind: 'success',
+    text: result.checkoutUrl ? 'Secure invoice checkout is ready. Payment has not been submitted.' :
+      result.state==='ai_enabled' ? 'Live AI drafting passed the connection check and is enabled for this school.' :
+      result.state==='student_created' ? `Student profile created in Odoo. Member number: ${result.memberNumber}. No membership, trial booking, portal access or message was created.` :
+      result.state==='trial_reserved' ? 'Trial reserved in Odoo. The class registration is saved; the CRM stage was not changed and no message was sent.' :
+      result.state==='trial_cancelled' ? 'Trial cancelled in Odoo. The class registration was cancelled and no message was sent.' :
+      result.state==='trial_attended' ? 'Trial attendance saved in Odoo. The CRM stage was not changed and no offer was sent.' :
+      result.state==='trial_no_show' ? 'No-show saved in Odoo. No automatic follow-up was scheduled.' :
+      result.state==='trial_converted' ? `Converted in Odoo: ${result.plan} membership ${result.membershipState==='active'?'started today':`ready to start on ${result.startDate}`}. No payment, portal invitation or message.` :
+      result.state==='attendance_recorded' ? `Attendance saved in Odoo: ${result.before} → ${result.after}.${result.reversal?' The original check-in record and receipt are kept; no class credit was refunded.':''}` :
+      result.state==='waiver_signed' ? `Waiver signed by ${result.signedBy} and stored in Odoo${result.pdfStored ? ' with the signed PDF' : '. The signature is saved; the PDF could not be generated here'}. No message was sent.` :
+      result.state==='consent_recorded' ? 'Consent saved in Odoo with its source and evidence. No message was sent.' :
+      result.state==='testing_roster_saved' ? `Testing roster saved in Odoo with ${result.count ?? 0} students. No rank, invoice or message was created.` :
+      result.state==='test_results_saved' ? `Test results saved in Odoo (${Array.isArray(result.changes)?result.changes.length:0} changed). No belt was awarded yet.` :
+      result.state==='promotions_awarded' ? `Promotions saved in Odoo: ${Array.isArray(result.promotions)?result.promotions.length:0} belt awards. No message or invoice.` :
+      result.state==='photo_updated' ? 'Photo saved in Odoo.' :
+      result.state==='photo_removed' ? 'Photo removed in Odoo.' :
+      result.enrollmentId ? `Registration saved in Odoo. Receipt: ${result.enrollmentId}.` : 'Saved in Odoo.',
+    ...(result.state==='testing_roster_saved' && result.testId ? {testing:{testId:result.testId}} : {}),
+    ...(result.state==='student_created' && result.memberId && result.memberNumber ? {intake:{memberId:result.memberId,memberNumber:result.memberNumber}} : {}),
+    ...(result.checkoutUrl && result.invoiceId && result.invoiceNumber && typeof result.amount==='number' && result.currency ?
+      {checkout:{url:result.checkoutUrl,invoiceId:result.invoiceId,invoiceNumber:result.invoiceNumber,amount:result.amount,currency:result.currency}} : {}),
+  };
+  onAcknowledged(feedback);
+  try {
+    await refresh();
+    return feedback;
+  } catch {
+    return {...feedback, refreshWarning: 'Saved successfully, but the latest screen data could not be loaded. Refresh to update the view; do not repeat this action.'};
+  }
+}
+
+/**
+ * Calls one hub operation through /api/hub. Throws an Error whose message is
+ * the hub error code, so runHubAction can explain it. Writes need a requestKey:
+ * make one per intended action and reuse it when retrying that action.
+ */
+export async function callHub<T = Record<string, unknown>>(
+  operation: string,
+  payload: Record<string, unknown> = {},
+  requestKey?: string,
+): Promise<T> {
+  const res = await fetch("/api/hub", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ operation, payload, ...(requestKey ? { requestKey } : {}) }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.code ?? "BACKEND_UNAVAILABLE");
+  return data as T;
+}
+
+export const newRequestKey = (operation: string) => `${operation}:${crypto.randomUUID()}`;

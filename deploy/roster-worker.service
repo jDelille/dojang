@@ -1,0 +1,45 @@
+# Roster background worker.
+#
+# Runs retention campaigns, appointment reminders, lead gathering and the
+# weekly licence re-check on BullMQ. The app loads without it, but nothing
+# scheduled will ever run. Install it alongside roster-web.service.
+
+[Unit]
+Description=Roster background worker
+Documentation=file:///opt/roster/documentation/index.html
+After=network-online.target postgresql.service redis-server.service roster-web.service
+Wants=network-online.target
+# The worker is useless without Redis; stop it if Redis goes away.
+Requires=redis-server.service
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+User=roster
+Group=roster
+WorkingDirectory=/opt/roster
+
+EnvironmentFile=/opt/roster/.env
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/npm run workers
+
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=roster-worker
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/roster/.next
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
