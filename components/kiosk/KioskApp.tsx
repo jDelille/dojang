@@ -23,6 +23,7 @@ import ConfirmScreen from "./ConfirmScreen";
 import ResultScreen from "./ResultScreen";
 import IdleWarning from "./IdleWarning";
 import { useIdleTimer } from "./useIdleTimer";
+import HelpScreen from "./HelpScreen";
 
 export default function KioskApp() {
 	// the reducer decides the next step. screens only say what happened (dispatch)
@@ -111,7 +112,12 @@ export default function KioskApp() {
 	let screen: ReactNode;
 
 	if (state.step === "welcome") {
-		screen = <WelcomeScreen onCheckIn={() => dispatch({ type: "start" })} />;
+		screen = (
+			<WelcomeScreen
+				onCheckIn={() => dispatch({ type: "start" })}
+				onHelp={() => dispatch({ type: "getStaffHelp" })}
+			/>
+		);
 	} else if (state.step === "session") {
 		screen = (
 			<ClassesScreen
@@ -168,20 +174,8 @@ export default function KioskApp() {
 			/>
 		);
 	} else {
-		// the only step left is "concierge" (Ask a question / staff help). not built yet
-		screen = (
-			<KioskFrame label={state.step}>
-				<p className="text-3xl font-semibold">
-					&quot;{state.step}&quot; screen coming next
-				</p>
-				<button
-					onClick={reset}
-					className="mt-8 min-h-12 w-fit rounded-2xl border border-kiosk-line px-6 text-lg"
-				>
-					Start over
-				</button>
-			</KioskFrame>
-		);
+		// concierge step: staff help only for now
+		screen = <HelpScreen onBack={reset} />;
 	}
 
 	return (
