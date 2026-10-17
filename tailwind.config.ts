@@ -51,6 +51,24 @@ const config: Config = {
         // Theme-independent overlay. `ink` flips to near-white in dark mode,
         // so it must never be used for a scrim.
         scrim: 'rgb(15 17 21 / <alpha-value>)',
+        // kiosk palette (same values as dojang-kiosk). separate name so it never clashes with the staff theme
+        kiosk: {
+          canvas: '#08080a', // page background
+          panel: '#101014', // cards
+          raised: '#17171d', // things on cards
+          interactive: '#1e1e26', // hover and selected
+          line: '#2a2a35', // borders
+          fg: '#f6f6f8', // main text
+          'fg-secondary': '#a8a8b8', // subtitles
+          muted: '#717184', // labels
+          brand: '#e8192c', // red = actions
+          mastery: '#d7b75c', // gold = rank only
+          agent: '#8a7cf6', // violet = ai only
+          success: '#26c76f',
+          warning: '#f6a63b',
+          danger: '#ef4053',
+          info: '#4c8dff',
+        },
       },
       // Every step the codebase actually uses — Tailwind's default scale omits
       // 12 and 15, and a missing step emits no CSS at all.
@@ -82,6 +100,8 @@ const config: Config = {
         display: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+        // apple's system font for the kiosk only (san francisco on mac/ipad)
+        kiosk: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'Inter', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         xs: ['0.75rem', { lineHeight: '1rem' }],
