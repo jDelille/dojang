@@ -6,6 +6,7 @@ import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { odooConfigured } from '@/lib/odoo';
 import { loadLessonPlan, loadSessionRoster, loadTodayClasses, type AcademyClass, type LessonPlan, type RosterEntry } from '@/lib/academy';
 import { PANEL, RosterList, Stat, dayBounds, formatIn, withParams } from '@/components/odoo/shared';
+import { InstructorTimesheets } from '@/components/hub/instructor-timesheets';
 import { cn } from '@/lib/utils';
 
 export const metadata = { title: 'Instructor Focus' };
@@ -15,7 +16,8 @@ const PATH = '/dashboard/instructor';
 /**
  * Instructor Focus (§12): tonight's class, booked vs present, who isn't here
  * yet and the lesson plan. No invoices, no marketing. Check-in stays with
- * Odoo's kiosk until a staff check-in route exists.
+ * Odoo's kiosk until a staff check-in route exists. Clock in/out and
+ * timesheets (Jodi's InstructorWorkspace) sit below, on the hub path.
  */
 export default async function InstructorPage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const { workspace } = await requireWorkspace();
@@ -30,6 +32,9 @@ export default async function InstructorPage({ searchParams }: { searchParams: P
         <Card>
           <EmptyState icon={<GraduationCap strokeWidth={1.75} />} title={t('notConnectedTitle')} description={t('notConnected')} />
         </Card>
+        <div className="mx-auto mt-4 max-w-4xl">
+          <InstructorTimesheets />
+        </div>
       </>
     );
   }
@@ -150,6 +155,10 @@ export default async function InstructorPage({ searchParams }: { searchParams: P
           )}
         </div>
       )}
+
+      <div className="mx-auto mt-4 max-w-4xl">
+        <InstructorTimesheets />
+      </div>
     </>
   );
 }

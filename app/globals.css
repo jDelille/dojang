@@ -112,3 +112,43 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * Printing a page that holds a .hub-printable block (a class roster) prints
+ * only that block, in black on white, without the dashboard shell around it.
+ */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  html:has(.hub-printable),
+  body:has(.hub-printable) {
+    background: #fff !important;
+    color: #000 !important;
+    color-scheme: light;
+  }
+  body:has(.hub-printable) *:not(:has(.hub-printable)):not(.hub-printable):not(.hub-printable *) {
+    display: none !important;
+  }
+  body:has(.hub-printable) *:has(.hub-printable) {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    background: #fff !important;
+  }
+  .hub-printable,
+  .hub-printable * {
+    color: #000 !important;
+    background: #fff !important;
+  }
+  .hub-printable tr {
+    break-inside: avoid;
+  }
+}

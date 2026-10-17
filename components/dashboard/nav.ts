@@ -1,5 +1,6 @@
 import {
   Activity,
+  BarChart3,
   Bot,
   CalendarDays,
   CheckSquare,
@@ -84,6 +85,7 @@ export const SECTIONS: NavSection[] = [
     labelKey: 'reports',
     pages: [
       { href: '/dashboard/pulse', labelKey: 'pulse', icon: Activity },
+      { href: '/dashboard/operations', labelKey: 'operations', icon: BarChart3 },
       { href: '/dashboard/agents', labelKey: 'agents', icon: Bot },
     ],
   },
