@@ -1,6 +1,6 @@
 "use client"; // uses state and effects, which only work in the browser
 
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, type ReactNode } from "react";
 import {
 	checkInFlowReducer,
 	initialCheckInFlow,
@@ -10,6 +10,10 @@ import {
 	outcomeFor,
 	type CheckInAnswer,
 } from "@/lib/kiosk/domain/kiosk/checkInOutcome";
+import {
+	IDLE_TIMEOUT_SECONDS,
+	IDLE_WARNING_SECONDS,
+} from "@/lib/kiosk/domain/kiosk/kioskConfig";
 import { getRoster, listSessions, submitCheckIn } from "@/lib/kiosk/demo";
 import KioskFrame from "./KioskFrame";
 import WelcomeScreen from "./WelcomeScreen";
@@ -17,13 +21,25 @@ import ClassesScreen from "./ClassesScreen";
 import IdentifyScreen from "./IdentifyScreen";
 import ConfirmScreen from "./ConfirmScreen";
 import ResultScreen from "./ResultScreen";
+import IdleWarning from "./IdleWarning";
+import { useIdleTimer } from "./useIdleTimer";
 
 export default function KioskApp() {
 	// the reducer decides the next step. screens only say what happened (dispatch)
 	const [state, dispatch] = useReducer(checkInFlowReducer, initialCheckInFlow);
 
-	// a stable "go back to a clean welcome" function (the result screen's timer needs one that never changes)
+	// a stable "go back to a clean welcome" function (timers need one that never changes)
 	const reset = useCallback(() => dispatch({ type: "reset" }), []);
+
+	// privacy idle timer: nobody touched the screen for a while, so clear everything.
+	// it runs only once someone has started (not on welcome) and not mid-send
+	const idle = useIdleTimer({
+		active: state.step !== "welcome" && state.step !== "sending",
+		restartKey: state.step, // a new step restarts the clock
+		timeoutSeconds: IDLE_TIMEOUT_SECONDS,
+		warningSeconds: IDLE_WARNING_SECONDS,
+		onTimeout: reset,
+	});
 
 	// class step with the list still "loading": fetch it, then report back
 	const loading =
@@ -91,12 +107,13 @@ export default function KioskApp() {
 		};
 	}, [sendingCommand]);
 
-	if (state.step === "welcome") {
-		return <WelcomeScreen onCheckIn={() => dispatch({ type: "start" })} />;
-	}
+	// pick the screen for the current step
+	let screen: ReactNode;
 
-	if (state.step === "session") {
-		return (
+	if (state.step === "welcome") {
+		screen = <WelcomeScreen onCheckIn={() => dispatch({ type: "start" })} />;
+	} else if (state.step === "session") {
+		screen = (
 			<ClassesScreen
 				sessions={state.sessions}
 				onPick={(session) => dispatch({ type: "selectSession", session })}
@@ -104,10 +121,8 @@ export default function KioskApp() {
 				onRetry={() => dispatch({ type: "retrySessions" })}
 			/>
 		);
-	}
-
-	if (state.step === "identify") {
-		return (
+	} else if (state.step === "identify") {
+		screen = (
 			<IdentifyScreen
 				session={state.session}
 				roster={state.roster}
@@ -118,10 +133,8 @@ export default function KioskApp() {
 				onRetry={() => dispatch({ type: "retryRoster" })}
 			/>
 		);
-	}
-
-	if (state.step === "confirm") {
-		return (
+	} else if (state.step === "confirm") {
+		screen = (
 			<ConfirmScreen
 				session={state.session}
 				member={state.member}
@@ -137,18 +150,14 @@ export default function KioskApp() {
 				}}
 			/>
 		);
-	}
-
-	if (state.step === "sending") {
-		return (
+	} else if (state.step === "sending") {
+		screen = (
 			<KioskFrame label="Checking in">
 				<p className="text-3xl font-semibold">Checking you in…</p>
 			</KioskFrame>
 		);
-	}
-
-	if (state.step === "result") {
-		return (
+	} else if (state.step === "result") {
+		screen = (
 			<ResultScreen
 				session={state.session}
 				member={state.member}
@@ -158,20 +167,30 @@ export default function KioskApp() {
 				onChooseClass={() => dispatch({ type: "changeSession" })}
 			/>
 		);
+	} else {
+		// the only step left is "concierge" (Ask a question / staff help). not built yet
+		screen = (
+			<KioskFrame label={state.step}>
+				<p className="text-3xl font-semibold">
+					&quot;{state.step}&quot; screen coming next
+				</p>
+				<button
+					onClick={reset}
+					className="mt-8 min-h-12 w-fit rounded-2xl border border-kiosk-line px-6 text-lg"
+				>
+					Start over
+				</button>
+			</KioskFrame>
+		);
 	}
 
-	// the only step left is "concierge" (Ask a question / staff help). not built yet
 	return (
-		<KioskFrame label={state.step}>
-			<p className="text-3xl font-semibold">
-				&quot;{state.step}&quot; screen coming next
-			</p>
-			<button
-				onClick={reset}
-				className="mt-8 min-h-12 w-fit rounded-2xl border border-kiosk-line px-6 text-lg"
-			>
-				Start over
-			</button>
-		</KioskFrame>
+		<>
+			{screen}
+			<IdleWarning
+				secondsLeft={idle.secondsLeft}
+				onStillHere={idle.stillHere}
+			/>
+		</>
 	);
 }
