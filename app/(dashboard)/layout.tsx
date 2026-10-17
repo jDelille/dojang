@@ -7,6 +7,7 @@ import { can } from '@/lib/rbac';
 import { brandStyle } from '@/lib/brand';
 import { checkLicense } from '@/lib/license-gate';
 import { getInstallState } from '@/lib/install';
+import { HubActionsProvider } from '@/components/hub/hub-client';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // A fresh copy of the script should land on the installer, not a login loop.
@@ -113,7 +114,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         desk={desk}
         showSuperAdmin={can(user.role, 'platform:admin')}
       >
-        {children}
+        <HubActionsProvider>{children}</HubActionsProvider>
       </DashboardShell>
     </>
   );

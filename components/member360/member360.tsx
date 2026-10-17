@@ -59,8 +59,11 @@ export async function Member360View({ member, tab, timezone, currency }: { membe
             {ts(`state.${member.membershipState}`)} · {member.rank ?? t('unranked')}
           </span>
         </div>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <MemberActions name={member.name} prompt={t('doForMePrompt', { name: member.name, number: member.memberNumber ?? String(member.id) })} />
+          <Link href={`/dashboard/contacts/${member.id}/manage`} className="text-[13px] font-semibold underline underline-offset-4">
+            Manage in Odoo →
+          </Link>
         </div>
       </div>
 

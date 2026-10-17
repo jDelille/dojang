@@ -3,6 +3,7 @@ import {
   Bot,
   CalendarDays,
   CheckSquare,
+  ClipboardCheck,
   GraduationCap,
   Inbox,
   KanbanSquare,
@@ -52,6 +53,7 @@ export const SECTIONS: NavSection[] = [
     pages: [
       { href: '/dashboard/appointments', labelKey: 'appointments', icon: CalendarDays },
       { href: '/dashboard/instructor', labelKey: 'instructor', icon: GraduationCap },
+      { href: '/dashboard/attendance', labelKey: 'attendance', icon: ClipboardCheck },
       { href: '/dashboard/tasks', labelKey: 'tasks', icon: CheckSquare },
     ],
   },
