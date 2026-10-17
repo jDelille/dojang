@@ -116,6 +116,7 @@ export default function KioskApp() {
 			<WelcomeScreen
 				onCheckIn={() => dispatch({ type: "start" })}
 				onHelp={() => dispatch({ type: "getStaffHelp" })}
+				onTrial={() => dispatch({ type: "openConcierge" })}
 			/>
 		);
 	} else if (state.step === "session") {
@@ -174,8 +175,12 @@ export default function KioskApp() {
 			/>
 		);
 	} else {
-		// concierge step: staff help only for now
-		screen = <HelpScreen onBack={reset} />;
+		screen = (
+			<HelpScreen
+				kind={state.startWith === "staffHelp" ? "help" : "trial"}
+				onBack={reset}
+			/>
+		);
 	}
 
 	return (
