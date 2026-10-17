@@ -5,6 +5,7 @@ type Props = {
 	onCheckIn: () => void; // starts the session-first journey: pick a class first
 	onHelp: () => void;
 	onTrial: () => void;
+	onEvents: () => void;
 };
 
 type Card = {
@@ -25,12 +26,17 @@ const CARDS: Card[] = [
 		enabled: true,
 	},
 	{ title: "Classes", sub: "See today's sessions", enabled: true }, // same journey as check in
-	{ title: "Events", sub: "What's coming up", enabled: false },
+	{ title: "Events", sub: "What's coming up", enabled: true },
 	{ title: "Book a trial", sub: "New here? Try a class", enabled: true },
 	{ title: "Get help", sub: "Talk to a staff member", enabled: true },
 ];
 
-export default function WelcomeScreen({ onCheckIn, onHelp, onTrial }: Props) {
+export default function WelcomeScreen({
+	onCheckIn,
+	onHelp,
+	onTrial,
+	onEvents,
+}: Props) {
 	return (
 		<KioskFrame label="Arrival">
 			<p className="font-mono text-xs uppercase tracking-[0.2em] text-kiosk-muted">
@@ -52,7 +58,9 @@ export default function WelcomeScreen({ onCheckIn, onHelp, onTrial }: Props) {
 								? onHelp
 								: c.title === "Book a trial"
 									? onTrial
-									: onCheckIn
+									: c.title === "Events"
+										? onEvents
+										: onCheckIn
 						}
 						disabled={!c.enabled} // a disabled button ignores taps and is announced as unavailable
 						className={`flex items-center justify-between rounded-2xl border px-6 py-7 text-left transition-colors ${

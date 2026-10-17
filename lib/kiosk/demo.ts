@@ -113,3 +113,32 @@ export async function submitCheckIn(
 		},
 	};
 }
+
+// demo events for the events screen. real ones come from odoo later
+export type DemoEvent = {
+	id: string;
+	title: string;
+	when: string;
+	note: string;
+};
+
+export const DEMO_EVENTS: DemoEvent[] = [
+	{
+		id: "e1",
+		title: "Belt Testing",
+		when: "Sat, Nov 1 · 10:00 AM",
+		note: "All ranks welcome",
+	},
+	{
+		id: "e2",
+		title: "Parents' Night Out",
+		when: "Fri, Nov 7 · 6:00 PM",
+		note: "Ages 5-12",
+	},
+	{
+		id: "e3",
+		title: "Sparring Workshop",
+		when: "Sat, Nov 15 · 1:00 PM",
+		note: "Gear required",
+	},
+];

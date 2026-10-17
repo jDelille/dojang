@@ -1,6 +1,12 @@
 "use client"; // uses state and effects, which only work in the browser
 
-import { useCallback, useEffect, useReducer, type ReactNode } from "react";
+import {
+	useCallback,
+	useEffect,
+	useReducer,
+	useState,
+	type ReactNode,
+} from "react";
 import {
 	checkInFlowReducer,
 	initialCheckInFlow,
@@ -24,19 +30,26 @@ import ResultScreen from "./ResultScreen";
 import IdleWarning from "./IdleWarning";
 import { useIdleTimer } from "./useIdleTimer";
 import HelpScreen from "./HelpScreen";
+import EventsScreen from "./EventsScreen";
 
 export default function KioskApp() {
 	// the reducer decides the next step. screens only say what happened (dispatch)
 	const [state, dispatch] = useReducer(checkInFlowReducer, initialCheckInFlow);
 
-	// a stable "go back to a clean welcome" function (timers need one that never changes)
-	const reset = useCallback(() => dispatch({ type: "reset" }), []);
+	// events is a read-only side trip from welcome, so a simple flag is enough
+	const [showEvents, setShowEvents] = useState(false);
+
+	const reset = useCallback(() => {
+		setShowEvents(false);
+		dispatch({ type: "reset" });
+	}, []);
 
 	// privacy idle timer: nobody touched the screen for a while, so clear everything.
 	// it runs only once someone has started (not on welcome) and not mid-send
 	const idle = useIdleTimer({
-		active: state.step !== "welcome" && state.step !== "sending",
-		restartKey: state.step, // a new step restarts the clock
+		active:
+			(state.step !== "welcome" || showEvents) && state.step !== "sending",
+		restartKey: `${state.step}-${showEvents}`,
 		timeoutSeconds: IDLE_TIMEOUT_SECONDS,
 		warningSeconds: IDLE_WARNING_SECONDS,
 		onTimeout: reset,
@@ -111,12 +124,15 @@ export default function KioskApp() {
 	// pick the screen for the current step
 	let screen: ReactNode;
 
-	if (state.step === "welcome") {
+	if (state.step === "welcome" && showEvents) {
+		screen = <EventsScreen onBack={reset} />;
+	} else if (state.step === "welcome") {
 		screen = (
 			<WelcomeScreen
 				onCheckIn={() => dispatch({ type: "start" })}
 				onHelp={() => dispatch({ type: "getStaffHelp" })}
 				onTrial={() => dispatch({ type: "openConcierge" })}
+				onEvents={() => setShowEvents(true)}
 			/>
 		);
 	} else if (state.step === "session") {
