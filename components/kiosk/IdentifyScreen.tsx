@@ -3,12 +3,18 @@ import KioskFrame from "./KioskFrame";
 
 // the three ways to say who you are (from the docs: qr, pin, search)
 const METHODS = [
-	{ title: "Scan QR / pass", sub: "Fastest" },
-	{ title: "Enter PIN", sub: "Member code" },
-	{ title: "Search name", sub: "Manual lookup" },
-];
+	{ id: "qr", title: "Scan QR / pass", sub: "Fastest" },
+	{ id: "pin", title: "Enter PIN", sub: "Member code" },
+	{ id: "search", title: "Search name", sub: "Manual lookup" },
+] as const;
 
-export default function IdentifyScreen({ onBack }: { onBack: () => void }) {
+export default function IdentifyScreen({
+	onBack,
+	onPick,
+}: {
+	onBack: () => void;
+	onPick: (id: "qr" | "pin" | "search") => void;
+}) {
 	return (
 		<KioskFrame label="Identify">
 			{/* back button: calls the function the parent gave us */}
@@ -33,6 +39,7 @@ export default function IdentifyScreen({ onBack }: { onBack: () => void }) {
 				{METHODS.map((m) => (
 					<button
 						key={m.title}
+						onClick={() => onPick(m.id)}
 						className="rounded-2xl border border-kiosk-line bg-kiosk-canvas px-6 py-7 text-left hover:bg-kiosk-interactive"
 					>
 						<span className="block text-xl font-semibold">{m.title}</span>

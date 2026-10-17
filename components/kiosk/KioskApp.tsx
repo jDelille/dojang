@@ -3,17 +3,32 @@
 import { useState } from "react";
 import WelcomeScreen from "./WelcomeScreen";
 import IdentifyScreen from "./IdentifyScreen";
+import PinScreen from "./PinScreen";
 
 // every screen the kiosk can show. we add names here as we build them
-export type Screen = "welcome" | "identify";
+export type Screen = "welcome" | "identify" | "pin";
 
 export default function KioskApp() {
-	const [screen, setScreen] = useState<Screen>("welcome"); // starts on welcome
+	const [screen, setScreen] = useState<Screen>("welcome");
 
-	// show the screen that matches the current state
-	return screen === "welcome" ? (
-		<WelcomeScreen onCheckIn={() => setScreen("identify")} />
-	) : (
-		<IdentifyScreen onBack={() => setScreen("welcome")} />
+	if (screen === "welcome") {
+		return <WelcomeScreen onCheckIn={() => setScreen("identify")} />;
+	}
+	if (screen === "identify") {
+		return (
+			<IdentifyScreen
+				onBack={() => setScreen("welcome")}
+				onPick={(id) => {
+					if (id === "pin") setScreen("pin"); // qr and search come later
+				}}
+			/>
+		);
+	}
+	// screen === "pin"
+	return (
+		<PinScreen
+			onBack={() => setScreen("identify")}
+			onSubmit={(code) => console.log("code entered:", code)} // next step: look it up in odoo
+		/>
 	);
 }
