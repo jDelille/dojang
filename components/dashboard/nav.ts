@@ -11,6 +11,7 @@ import {
   Receipt,
   Settings,
   Shield,
+  Target,
   UserPlus,
   Users,
   type LucideIcon,
@@ -65,6 +66,7 @@ export const SECTIONS: NavSection[] = [
     pages: [
       { href: '/dashboard/leads', labelKey: 'leads', icon: UserPlus },
       { href: '/dashboard/pipeline', labelKey: 'pipeline', icon: KanbanSquare },
+      { href: '/dashboard/sales', labelKey: 'sales', icon: Target },
     ],
   },
   {

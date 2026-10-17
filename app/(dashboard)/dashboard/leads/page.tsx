@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Mail, Phone, Search, UserPlus } from 'lucide-react';
 import { requireWorkspace } from '@/lib/session';
@@ -78,7 +79,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                     {data.leads.map((l) => (
                       <Tr key={l.id}>
                         <Td>
-                          <p className="font-medium">{l.contact}</p>
+                          <Link href={`/dashboard/sales/leads/${l.id}`} className="font-medium hover:underline">
+                            {l.contact}
+                          </Link>
                           <p className="text-xs muted">{[l.name !== l.contact ? l.name : null, l.source].filter(Boolean).join(' · ')}</p>
                         </Td>
                         <Td>
