@@ -1054,6 +1054,7 @@
   },
   "members": {
     "members": "Members",
+    "newStudent": "New student",
     "count": "{count, plural, one {# member} other {# members}} in Odoo",
     "allMembers": "All members",
     "search": "Search name, number, phone or email",

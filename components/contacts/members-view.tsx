@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Mail, Phone, Search, Users } from 'lucide-react';
-import { Card, CardHeader, EmptyState, Input, PageHeader, Table, Td, Th, Tr } from '@/components/ui';
+import { Mail, Phone, Search, UserPlus, Users } from 'lucide-react';
+import { buttonStyles, Card, CardHeader, EmptyState, Input, PageHeader, Table, Td, Th, Tr } from '@/components/ui';
 import { Pagination } from '@/components/ui/pagination';
 import { cn } from '@/lib/utils';
 import type { MemberRowSummary } from '@/lib/academy';
@@ -47,7 +47,16 @@ export function MembersView({
 
   return (
     <>
-      <PageHeader title={t('members')} description={data.ok ? t('count', { count: data.total }) : undefined} />
+      <PageHeader
+        title={t('members')}
+        description={data.ok ? t('count', { count: data.total }) : undefined}
+        actions={
+          <Link href="/dashboard/contacts/new" className={buttonStyles({ variant: 'primary', size: 'sm' })}>
+            <UserPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
+            {t('newStudent')}
+          </Link>
+        }
+      />
 
       {!data.ok ? (
         <Card>
