@@ -12,6 +12,7 @@ import {
   KanbanSquare,
   ListChecks,
   Megaphone,
+  MessageSquareReply,
   Receipt,
   Settings,
   Sparkles,
@@ -91,6 +92,7 @@ export const SECTIONS: NavSection[] = [
     pages: [
       { href: '/dashboard/inbox', labelKey: 'inbox', icon: Inbox },
       { href: '/dashboard/messaging', labelKey: 'messaging', icon: Megaphone },
+      { href: '/dashboard/follow-ups', labelKey: 'followUps', icon: MessageSquareReply },
     ],
   },
   {

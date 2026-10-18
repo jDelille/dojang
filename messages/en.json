@@ -33,6 +33,7 @@
     "courses": "Course rosters",
     "testing": "Belt testing",
     "messaging": "Messaging & consent",
+    "followUps": "Follow-ups",
     "setup": "School setup",
     "aiSettings": "AI settings",
     "crm": "CRM",
@@ -1226,7 +1227,8 @@
       "billing": "Billing",
       "family": "Family",
       "messages": "Messages",
-      "documents": "Documents"
+      "documents": "Documents",
+      "safety": "Safety"
     },
     "actions": {
       "checkIn": "Check in",

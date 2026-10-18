@@ -3,10 +3,17 @@ import { getTranslations } from 'next-intl/server';
 import { ArrowLeft } from 'lucide-react';
 import { PANEL, Pill, formatIn, withParams } from '@/components/odoo/shared';
 import { MemberActions } from '@/components/member360/actions';
+import {
+  MemberDocumentsPanel,
+  MemberFamilyPanel,
+  MemberMessagesPanel,
+  MemberSafetyPanel,
+  MemberStaffActionsPanel,
+} from '@/components/hub/member-hub-records';
 import { attendanceLabel, attended, memberInsight, type Member360 } from '@/lib/member360';
 import { cn, formatCurrency, initials } from '@/lib/utils';
 
-export const MEMBER_TABS = ['overview', 'timeline', 'attendance', 'progress', 'membership', 'billing', 'family', 'messages', 'documents'] as const;
+export const MEMBER_TABS = ['overview', 'timeline', 'attendance', 'progress', 'membership', 'billing', 'family', 'messages', 'documents', 'safety'] as const;
 export type MemberTab = (typeof MEMBER_TABS)[number];
 
 type T = Awaited<ReturnType<typeof getTranslations<'member360'>>>;
@@ -89,9 +96,12 @@ export async function Member360View({ member, tab, timezone, currency }: { membe
           {tab === 'overview' && <Overview member={member} t={t} date={date} />}
 
           {tab === 'timeline' && (
-            <section className={PANEL} aria-label={t('tabs.timeline')}>
-              <Timeline member={member} t={t} date={date} />
-            </section>
+            <div className="space-y-4">
+              <section className={PANEL} aria-label={t('tabs.timeline')}>
+                <Timeline member={member} t={t} date={date} />
+              </section>
+              <MemberStaffActionsPanel memberId={String(member.id)} />
+            </div>
           )}
 
           {tab === 'attendance' && (
@@ -235,30 +245,39 @@ export async function Member360View({ member, tab, timezone, currency }: { membe
                   }))}
                 />
               </section>
+              <MemberFamilyPanel memberId={String(member.id)} />
             </div>
           )}
 
           {tab === 'messages' && (
-            <section className={PANEL}>
-              <p className="text-[13px] font-semibold">{t('messagesTitle')}</p>
-              <p className="mt-1 text-[12px] muted">{t('messagesPending')}</p>
-            </section>
+            <div className="space-y-4">
+              <MemberMessagesPanel memberId={String(member.id)} />
+              <section className={PANEL}>
+                <p className="text-[13px] font-semibold">{t('messagesTitle')}</p>
+                <p className="mt-1 text-[12px] muted">{t('messagesPending')}</p>
+              </section>
+            </div>
           )}
 
+          {tab === 'safety' && <MemberSafetyPanel memberId={String(member.id)} />}
+
           {tab === 'documents' && (
-            <section className={PANEL} aria-labelledby="docs-waiver">
-              <p id="docs-waiver" className="eyebrow mb-3">
-                {t('waiver')}
-              </p>
-              <div className="flex items-center justify-between gap-3 text-[13px]">
-                <span>{t('liabilityWaiver')}</span>
-                {member.waiverState === 'signed' ? (
-                  <Pill tone="success">{member.waiverSignedOn ? t('signedOn', { date: date(member.waiverSignedOn) }) : t('signed')}</Pill>
-                ) : (
-                  <Pill tone="warning">{t('notSigned')}</Pill>
-                )}
-              </div>
-            </section>
+            <div className="space-y-4">
+              <section className={PANEL} aria-labelledby="docs-waiver">
+                <p id="docs-waiver" className="eyebrow mb-3">
+                  {t('waiver')}
+                </p>
+                <div className="flex items-center justify-between gap-3 text-[13px]">
+                  <span>{t('liabilityWaiver')}</span>
+                  {member.waiverState === 'signed' ? (
+                    <Pill tone="success">{member.waiverSignedOn ? t('signedOn', { date: date(member.waiverSignedOn) }) : t('signed')}</Pill>
+                  ) : (
+                    <Pill tone="warning">{t('notSigned')}</Pill>
+                  )}
+                </div>
+              </section>
+              <MemberDocumentsPanel memberId={String(member.id)} />
+            </div>
           )}
         </div>
 

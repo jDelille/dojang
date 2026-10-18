@@ -8,6 +8,7 @@ import { PANEL } from '@/components/odoo/shared';
 import { explainHubError, type ActionFeedback } from '@/lib/hub-actions';
 import { Feedback, HubGate, Notice, money, preview, useHubActions, useHubMe, useHubRead, when } from '@/components/hub/hub-client';
 import { ChecklistItems, type ChecklistItem } from '@/components/hub/checklist-items';
+import { FamilyRecords } from '@/components/hub/member-hub-records';
 import { cn } from '@/lib/utils';
 
 /** Ported from Jodi's MemberManagement (with the family part of ConnectedMemberDetails and SetupChecklist's ChecklistItems). */
@@ -552,61 +553,6 @@ function OnboardingStatus({ memberId }: { memberId: string }) {
         {onboarding.data.done} of {onboarding.data.total} steps complete
       </p>
       <ChecklistItems items={onboarding.data.items} />
-    </>
-  );
-}
-
-type Family = {
-  household: string | null;
-  members: { id: string; name: string }[];
-  householdGuardians?: { id: string; name: string; primary: boolean }[];
-  guardians: { id: string; name: string; channel: string; allowReply: boolean }[];
-};
-
-function FamilyRecords({ memberId }: { memberId: string }) {
-  const workspace = useHubRead<{ member?: { id: string }; family: Family | null }>(`members/${memberId}`);
-  if (workspace.error) return <Notice tone="alert">{explainHubError(workspace.error)}</Notice>;
-  if (!workspace.data) return <Notice>Loading this member’s authorized records…</Notice>;
-  if (workspace.data.member?.id !== memberId) return <Notice tone="alert">{explainHubError('MEMBER_DETAILS_UNAVAILABLE')}</Notice>;
-  const family = workspace.data.family;
-  if (!family) return <p className={TEXT}>Family and guardian details require manager or owner access.</p>;
-  return (
-    <>
-      <p className={TEXT}>
-        Household: <strong>{family.household || 'Not linked'}</strong>
-      </p>
-      {family.members.map((member) => (
-        <p key={member.id} className={TEXT}>
-          <Link href={`/dashboard/contacts/${member.id}`} className="underline underline-offset-4">
-            {member.name} →
-          </Link>
-        </p>
-      ))}
-      <h3 className="font-semibold">Household guardians</h3>
-      {family.householdGuardians?.length ? (
-        family.householdGuardians.map((guardian) => (
-          <div key={guardian.id} className={ROW}>
-            <strong className={TEXT}>{guardian.name}</strong>
-            <p className={cn(TEXT, 'muted')}>{guardian.primary ? 'Primary guardian' : 'Guardian'} · Native household relationship</p>
-          </div>
-        ))
-      ) : (
-        <p className={TEXT}>No guardian is recorded on this household.</p>
-      )}
-      <p className="text-[12px] muted">A household guardian is not a verified messaging channel and does not grant signing, payment or portal access.</p>
-      <h3 className="font-semibold">Verified guardian channels</h3>
-      {family.guardians.length ? (
-        family.guardians.map((guardian) => (
-          <div key={guardian.id} className={ROW}>
-            <strong className={TEXT}>{guardian.name}</strong>
-            <p className={cn(TEXT, 'muted')}>
-              {guardian.channel} · {guardian.allowReply ? 'Replies permitted' : 'Replies not permitted'}
-            </p>
-          </div>
-        ))
-      ) : (
-        <p className={TEXT}>No verified guardian channel is linked. A matching name or household does not establish consent.</p>
-      )}
     </>
   );
 }
