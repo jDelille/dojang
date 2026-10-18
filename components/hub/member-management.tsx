@@ -7,6 +7,7 @@ import { Button, Field, Input, Select, Textarea } from '@/components/ui';
 import { PANEL } from '@/components/odoo/shared';
 import { explainHubError, type ActionFeedback } from '@/lib/hub-actions';
 import { Feedback, HubGate, Notice, money, preview, useHubActions, useHubMe, useHubRead, when } from '@/components/hub/hub-client';
+import { ChecklistItems, type ChecklistItem } from '@/components/hub/checklist-items';
 import { cn } from '@/lib/utils';
 
 /** Ported from Jodi's MemberManagement (with the family part of ConnectedMemberDetails and SetupChecklist's ChecklistItems). */
@@ -541,8 +542,6 @@ function Billing({ data, disabled, review }: FormProps) {
   );
 }
 
-type ChecklistItem = { key: string; label: string; done: boolean; detail: string; where: string };
-
 function OnboardingStatus({ memberId }: { memberId: string }) {
   const onboarding = useHubRead<{ items: ChecklistItem[]; done: number; total: number }>(`members/${memberId}/onboarding`);
   if (onboarding.error) return <Notice tone="alert">{explainHubError(onboarding.error)}</Notice>;
@@ -552,17 +551,7 @@ function OnboardingStatus({ memberId }: { memberId: string }) {
       <p className={TEXT}>
         {onboarding.data.done} of {onboarding.data.total} steps complete
       </p>
-      <ul aria-label="Checklist" className="space-y-2">
-        {onboarding.data.items.map((item) => (
-          <li key={item.key} className={ROW} aria-label={`${item.label}: ${item.done ? 'done' : 'needs attention'}`}>
-            <strong className={TEXT}>
-              {item.done ? '✓' : '○'} {item.label}
-            </strong>
-            <p className={cn(TEXT, 'muted')}>{item.detail}</p>
-            {!item.done && <p className="text-[12px] muted">Where: {item.where}</p>}
-          </li>
-        ))}
-      </ul>
+      <ChecklistItems items={onboarding.data.items} />
     </>
   );
 }
