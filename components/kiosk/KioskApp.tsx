@@ -20,7 +20,7 @@ import {
 	IDLE_TIMEOUT_SECONDS,
 	IDLE_WARNING_SECONDS,
 } from "@/lib/kiosk/domain/kiosk/kioskConfig";
-import { getRoster, listSessions, submitCheckIn } from "@/lib/kiosk/demo";
+import { getRoster, listSessions, submitCheckIn } from "@/lib/kiosk/api";
 import KioskFrame from "./KioskFrame";
 import WelcomeScreen from "./WelcomeScreen";
 import ClassesScreen from "./ClassesScreen";
