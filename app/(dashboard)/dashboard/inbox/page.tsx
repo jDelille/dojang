@@ -1,14 +1,17 @@
-import { requireWorkspace } from '@/lib/session';
-import { InboxClient } from '@/components/inbox/inbox-client';
+import { PageHeader } from '@/components/ui';
+import { ParentMessages } from '@/components/hub/parent-messages';
 
 export const metadata = { title: 'Inbox' };
 
-export default async function InboxPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ conversation?: string }>;
-}) {
-  await requireWorkspace();
-  const params = await searchParams;
-  return <InboxClient initialConversationId={params.conversation} />;
+/**
+ * Parent messages from Odoo (Jodi's Hub inbox). The template's Prisma inbox
+ * (components/inbox/inbox-client.tsx) is no longer shown: Roster doesn't use Prisma.
+ */
+export default function InboxPage() {
+  return (
+    <>
+      <PageHeader title="Inbox" description="Review customer messages, prepare replies and arrange classes." />
+      <ParentMessages />
+    </>
+  );
 }
