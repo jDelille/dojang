@@ -250,3 +250,39 @@ export function problemStatus(code: string) {
   if (['VERSION_CONFLICT', 'IDEMPOTENCY_CONFLICT', 'ATTENDANCE_REVIEW_REQUIRED', 'NOT_ON_ROSTER'].includes(code)) return 409;
   return 503;
 }
+
+export type ReadinessProbe = {
+  memberCount: number;
+  sessionCount: number;
+  followUpEnabled: boolean;
+  aiEnabled: boolean;
+  aiCredentialConfigured: boolean;
+  ebGymInstalled: boolean;
+};
+
+/**
+ * v1's readiness check (Jodi #9/#14): one real round trip through the staff
+ * gateway. Returns only counts and on/off flags, never member details.
+ */
+export async function probeReadiness(): Promise<ReadinessProbe> {
+  const [members, context, capabilities] = await Promise.all([
+    rpc('/kiosk/v2/staff/members', {}, 10_000),
+    workflow('context', {}),
+    workflow('readiness', {}),
+  ]);
+  if (!Array.isArray(members.members) || !Array.isArray(context.sessions) || typeof context.followUpEnabled !== 'boolean') {
+    throw new Error('Invalid readiness reads');
+  }
+  const flags = ['followUpEnabled', 'aiEnabled', 'aiCredentialConfigured', 'ebGymInstalled'];
+  if (capabilities.schema !== 'dojang-readiness-v1' || flags.some((flag) => typeof capabilities[flag] !== 'boolean')) {
+    throw new Error('Invalid readiness capabilities');
+  }
+  return {
+    memberCount: members.members.length,
+    sessionCount: context.sessions.length,
+    followUpEnabled: capabilities.followUpEnabled === true,
+    aiEnabled: capabilities.aiEnabled === true,
+    aiCredentialConfigured: capabilities.aiCredentialConfigured === true,
+    ebGymInstalled: capabilities.ebGymInstalled === true,
+  };
+}
