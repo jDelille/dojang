@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Mail, Phone, Search, UserPlus, Users } from 'lucide-react';
+import { Archive, Mail, Phone, Search, UserPlus, Users } from 'lucide-react';
 import { buttonStyles, Card, CardHeader, EmptyState, Input, PageHeader, Table, Td, Th, Tr } from '@/components/ui';
 import { Pagination } from '@/components/ui/pagination';
 import { cn } from '@/lib/utils';
@@ -51,10 +51,16 @@ export function MembersView({
         title={t('members')}
         description={data.ok ? t('count', { count: data.total }) : undefined}
         actions={
-          <Link href="/dashboard/contacts/new" className={buttonStyles({ variant: 'primary', size: 'sm' })}>
-            <UserPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
-            {t('newStudent')}
-          </Link>
+          <>
+            <Link href="/dashboard/contacts/archived" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+              <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
+              {t('archived')}
+            </Link>
+            <Link href="/dashboard/contacts/new" className={buttonStyles({ variant: 'primary', size: 'sm' })}>
+              <UserPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
+              {t('newStudent')}
+            </Link>
+          </>
         }
       />
 

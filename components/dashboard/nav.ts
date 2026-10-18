@@ -1,6 +1,8 @@
 import {
   Activity,
+  Award,
   BarChart3,
+  BookOpen,
   Bot,
   CalendarDays,
   CheckSquare,
@@ -8,6 +10,7 @@ import {
   GraduationCap,
   Inbox,
   KanbanSquare,
+  Megaphone,
   Receipt,
   Settings,
   Shield,
@@ -46,7 +49,10 @@ export const SECTIONS: NavSection[] = [
     id: 'people',
     abbr: 'PE',
     labelKey: 'people',
-    pages: [{ href: '/dashboard/contacts', labelKey: 'contacts', icon: Users }],
+    pages: [
+      { href: '/dashboard/contacts', labelKey: 'contacts', icon: Users },
+      { href: '/dashboard/testing', labelKey: 'testing', icon: Award },
+    ],
   },
   {
     id: 'ops',
@@ -56,6 +62,7 @@ export const SECTIONS: NavSection[] = [
       { href: '/dashboard/appointments', labelKey: 'appointments', icon: CalendarDays },
       { href: '/dashboard/instructor', labelKey: 'instructor', icon: GraduationCap },
       { href: '/dashboard/attendance', labelKey: 'attendance', icon: ClipboardCheck },
+      { href: '/dashboard/courses', labelKey: 'courses', icon: BookOpen },
       { href: '/dashboard/tasks', labelKey: 'tasks', icon: CheckSquare },
     ],
   },
@@ -79,7 +86,10 @@ export const SECTIONS: NavSection[] = [
     id: 'engage',
     abbr: 'EN',
     labelKey: 'engage',
-    pages: [{ href: '/dashboard/inbox', labelKey: 'inbox', icon: Inbox }],
+    pages: [
+      { href: '/dashboard/inbox', labelKey: 'inbox', icon: Inbox },
+      { href: '/dashboard/messaging', labelKey: 'messaging', icon: Megaphone },
+    ],
   },
   {
     id: 'intel',

@@ -30,6 +30,9 @@
     "classesSection": "Classes",
     "instructor": "Instructor Focus",
     "attendance": "Attendance review",
+    "courses": "Course rosters",
+    "testing": "Belt testing",
+    "messaging": "Messaging & consent",
     "crm": "CRM",
     "pulse": "Business Pulse",
     "operations": "Operations reports",
@@ -1056,6 +1059,7 @@
   "members": {
     "members": "Members",
     "newStudent": "New student",
+    "archived": "Archived",
     "count": "{count, plural, one {# member} other {# members}} in Odoo",
     "allMembers": "All members",
     "search": "Search name, number, phone or email",

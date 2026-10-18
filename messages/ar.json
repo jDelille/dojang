@@ -30,6 +30,9 @@
     "classesSection": "الحصص",
     "instructor": "تركيز المدرب",
     "attendance": "مراجعة الحضور",
+    "courses": "قوائم الدورات",
+    "testing": "اختبارات الأحزمة",
+    "messaging": "الرسائل والموافقة",
     "crm": "إدارة العملاء",
     "pulse": "نبض الأعمال",
     "operations": "تقارير العمليات",
@@ -1056,6 +1059,7 @@
   "members": {
     "members": "الأعضاء",
     "newStudent": "طالب جديد",
+    "archived": "المؤرشفون",
     "count": "{count, plural, one {عضو واحد} other {# أعضاء}} في Odoo",
     "allMembers": "كل الأعضاء",
     "search": "ابحث بالاسم أو الرقم أو الهاتف أو البريد",
